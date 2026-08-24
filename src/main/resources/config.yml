@@ -128,6 +128,11 @@ notifications:
     volume: 1.0
     pitch: 1.0
     title: true
+  april-fight:
+    sounds:
+      - minecraft:entity.creeper.primed;1.0;0.7
+      - minecraft:entity.ghast.scream;0.8;1.2
+    title: true
   victory:
     sound: minecraft:ui.toast.challenge_complete
     volume: 1.0
@@ -138,6 +143,23 @@ notifications:
     volume: 1.0
     pitch: 0.6
     title: true
+april-fools:
+  # The real Dragon stays invisible and supplies the Vanilla flight path.
+  # Damage dealt to this giant Creeper proxy is forwarded to the Dragon.
+  creeper-scale: 6.0
+  vertical-offset: -4.0
+  projectiles:
+    # Every Dragon fireball becomes either flying TNT or a Ghast fireball.
+    tnt-chance: 0.5
+    speed: 1.1
+    tnt-fuse-ticks: 45
+    fireball-yield: 2.0
+victory-fireworks:
+  enabled: true
+  waves: 4
+  fireworks-per-wave: 5
+  interval-ticks: 12
+  power: 1
 rewards:
   # Per-player variables: {player}, {uuid}, {damage}, {rank}, {players}, {player_count}
   participation:

@@ -1,6 +1,8 @@
 package net.townysmp.dragonevent;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Color;
+import org.bukkit.FireworkEffect;
 import org.bukkit.GameRule;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -17,18 +19,25 @@ import org.bukkit.block.Block;
 import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Creeper;
+import org.bukkit.entity.DragonFireball;
+import org.bukkit.entity.Firework;
 import org.bukkit.entity.Item;
+import org.bukkit.entity.LargeFireball;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
+import org.bukkit.entity.TNTPrimed;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
@@ -40,6 +49,8 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.inventory.meta.FireworkMeta;
+import org.bukkit.util.Vector;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -55,6 +66,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 
 final class DragonEventManager implements Listener {
@@ -77,6 +89,8 @@ final class DragonEventManager implements Listener {
     private EventState state = EventState.IDLE;
     private World eventWorld;
     private EnderDragon dragon;
+    private Creeper aprilCreeper;
+    private EventMode eventMode = EventMode.NORMAL;
     private BukkitTask ticker;
     private BukkitTask finishTask;
     private BukkitTask resetTask;
@@ -84,6 +98,8 @@ final class DragonEventManager implements Listener {
     private BukkitTask fightClockTask;
     private BukkitTask closingCountdownTask;
     private BukkitTask spectatorGuardTask;
+    private BukkitTask aprilVisualTask;
+    private BukkitTask victoryFireworkTask;
     private int secondsLeft;
     private int fightSecondsLeft;
     private int closingSecondsLeft;
@@ -107,6 +123,7 @@ final class DragonEventManager implements Listener {
     String fightTimeRemaining() { return formatTime(fightSecondsRemaining()); }
     int closingSecondsRemaining() { return Math.max(0, closingSecondsLeft); }
     String closingTimeRemaining() { return formatTime(closingSecondsRemaining()); }
+    EventMode eventMode() { return eventMode; }
     void setExitLocation(Player player) {
         Location location = player.getLocation();
         plugin.getConfig().set("world.exit-location.world", location.getWorld().getName());
@@ -179,8 +196,9 @@ final class DragonEventManager implements Listener {
     }
     String runtimeWorldName() { return plugin.getConfig().getString("world.runtime-name", "dragonevent_end"); }
 
-    synchronized boolean start(Integer customSeconds) {
+    synchronized boolean start(Integer customSeconds, EventMode requestedMode) {
         if (state != EventState.IDLE) return false;
+        eventMode = requestedMode == null ? EventMode.NORMAL : requestedMode;
         state = EventState.PREPARING;
         secondsLeft = customSeconds == null
                 ? plugin.getConfig().getInt("event.countdown-seconds", 10800)
@@ -482,12 +500,56 @@ final class DragonEventManager implements Listener {
         AttributeInstance maxHealth = dragon.getAttribute(Attribute.MAX_HEALTH);
         if (maxHealth != null) maxHealth.setBaseValue(health);
         dragon.setHealth(health);
-        dragon.customName(messages.getRaw("dragon-name", Map.of("health", String.format(Locale.US, "%.0f", health))));
+        boolean aprilFools = eventMode == EventMode.APRIL_FOOLS;
+        String nameKey = aprilFools ? "dragon-name-april" : "dragon-name";
+        dragon.customName(messages.getRaw(nameKey, Map.of("health", String.format(Locale.US, "%.0f", health))));
+        if (aprilFools) startAprilFoolsVisual();
         eventWorld.setGameRule(GameRule.DO_MOB_SPAWNING, true);
         state = EventState.ACTIVE;
         startFightClock();
-        messages.broadcast("fight-start", Map.of("health", String.format(Locale.US, "%.0f", health)), "fight");
+        messages.broadcast(aprilFools ? "fight-start-april" : "fight-start",
+                Map.of("health", String.format(Locale.US, "%.0f", health)), aprilFools ? "april-fight" : "fight");
         checkForBattleLoss();
+    }
+
+    private void startAprilFoolsVisual() {
+        cancelAprilVisual();
+        dragon.setInvisible(true);
+        Location spawn = aprilCreeperLocation();
+        aprilCreeper = eventWorld.spawn(spawn, Creeper.class, creeper -> {
+            creeper.setAI(false);
+            creeper.setGravity(false);
+            creeper.setSilent(true);
+            creeper.setPersistent(true);
+            creeper.setRemoveWhenFarAway(false);
+            creeper.setCollidable(false);
+            creeper.setPowered(true);
+            creeper.setExplosionRadius(0);
+            creeper.addScoreboardTag("townysmp_april_creeper");
+            creeper.customName(messages.getRaw("april-creeper-name", Map.of()));
+            creeper.setCustomNameVisible(true);
+            AttributeInstance scale = creeper.getAttribute(Attribute.SCALE);
+            if (scale != null) {
+                scale.setBaseValue(Math.max(1.0, Math.min(16.0,
+                        plugin.getConfig().getDouble("april-fools.creeper-scale", 6.0))));
+            }
+        });
+        aprilVisualTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (eventMode != EventMode.APRIL_FOOLS || state != EventState.ACTIVE
+                    || dragon == null || !dragon.isValid() || aprilCreeper == null || !aprilCreeper.isValid()) {
+                cancelAprilVisual();
+                return;
+            }
+            aprilCreeper.teleport(aprilCreeperLocation());
+            aprilCreeper.setVelocity(new Vector());
+        }, 1L, 1L);
+    }
+
+    private Location aprilCreeperLocation() {
+        Location location = dragon.getLocation().clone().add(0.0,
+                plugin.getConfig().getDouble("april-fools.vertical-offset", -4.0), 0.0);
+        location.setPitch(0.0f);
+        return location;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -507,6 +569,68 @@ final class DragonEventManager implements Listener {
         Player attacker = resolvePlayer(event.getDamager());
         if (attacker == null || !participants.contains(attacker.getUniqueId())) return;
         damage.merge(attacker.getUniqueId(), event.getFinalDamage(), Double::sum);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onAprilCreeperDamage(EntityDamageByEntityEvent event) {
+        if (eventMode != EventMode.APRIL_FOOLS || state != EventState.ACTIVE
+                || aprilCreeper == null || event.getEntity() != aprilCreeper) return;
+        double forwardedDamage = Math.max(0.0, event.getFinalDamage());
+        Player attacker = resolvePlayer(event.getDamager());
+        event.setCancelled(true);
+        if (attacker == null || !participants.contains(attacker.getUniqueId())
+                || dragon == null || !dragon.isValid() || forwardedDamage <= 0.0) return;
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (state == EventState.ACTIVE && dragon != null && dragon.isValid()) {
+                dragon.damage(forwardedDamage, attacker);
+            }
+        });
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onAprilDragonProjectile(ProjectileLaunchEvent event) {
+        if (eventMode != EventMode.APRIL_FOOLS || state != EventState.ACTIVE
+                || !(event.getEntity() instanceof DragonFireball fireball)
+                || fireball.getShooter() != dragon) return;
+        Location source = fireball.getLocation().clone();
+        Vector direction = fireball.getVelocity().clone();
+        if (direction.lengthSquared() < 0.01) direction = dragon.getLocation().getDirection();
+        direction.normalize();
+        event.setCancelled(true);
+        Vector finalDirection = direction;
+        Bukkit.getScheduler().runTask(plugin, () -> launchAprilProjectile(source, finalDirection));
+    }
+
+    private void launchAprilProjectile(Location source, Vector direction) {
+        if (eventMode != EventMode.APRIL_FOOLS || state != EventState.ACTIVE || eventWorld == null) return;
+        double speed = Math.max(0.2, plugin.getConfig().getDouble("april-fools.projectiles.speed", 1.1));
+        double tntChance = Math.max(0.0, Math.min(1.0,
+                plugin.getConfig().getDouble("april-fools.projectiles.tnt-chance", 0.5)));
+        if (ThreadLocalRandom.current().nextDouble() < tntChance) {
+            TNTPrimed tnt = eventWorld.spawn(source, TNTPrimed.class);
+            tnt.setFuseTicks(Math.max(10, plugin.getConfig().getInt("april-fools.projectiles.tnt-fuse-ticks", 45)));
+            tnt.setVelocity(direction.clone().multiply(speed));
+            tnt.addScoreboardTag("townysmp_april_projectile");
+            eventWorld.playSound(source, "minecraft:entity.creeper.primed", 1.0f, 0.8f);
+            return;
+        }
+        LargeFireball ghastFireball = eventWorld.spawn(source, LargeFireball.class);
+        ghastFireball.setShooter(aprilCreeper != null ? aprilCreeper : dragon);
+        ghastFireball.setDirection(direction);
+        ghastFireball.setVelocity(direction.clone().multiply(speed));
+        ghastFireball.setYield((float) Math.max(0.0,
+                plugin.getConfig().getDouble("april-fools.projectiles.fireball-yield", 2.0)));
+        ghastFireball.setIsIncendiary(false);
+        ghastFireball.addScoreboardTag("townysmp_april_projectile");
+        eventWorld.playSound(source, "minecraft:entity.ghast.shoot", 1.0f, 0.8f);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onAprilExplosion(EntityExplodeEvent event) {
+        if (event.getEntity().getScoreboardTags().contains("townysmp_april_projectile")) {
+            event.blockList().clear();
+            event.setYield(0.0f);
+        }
     }
 
     private void startFightClock() {
@@ -529,8 +653,17 @@ final class DragonEventManager implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onDeath(EntityDeathEvent event) {
         if (state == EventState.ACTIVE && event.getEntity() == dragon) {
+            cancelAprilVisual();
             openExitPortal();
             finish(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onVictoryFireworkDamage(EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof Firework firework
+                && firework.getScoreboardTags().contains("townysmp_dragon_victory")) {
+            event.setCancelled(true);
         }
     }
 
@@ -560,8 +693,16 @@ final class DragonEventManager implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerRespawn(PlayerRespawnEvent event) {
         Player player = event.getPlayer();
-        if (eventWorld == null || !participants.contains(player.getUniqueId())
+        if (eventWorld == null || !player.getWorld().equals(eventWorld)
+                || !participants.contains(player.getUniqueId())
                 || state == EventState.IDLE || state == EventState.RESETTING) return;
+        if (state == EventState.FINISHING) {
+            Location exit = exitLocation();
+            if (exit != null) event.setRespawnLocation(exit);
+            departedParticipants.add(player.getUniqueId());
+            Bukkit.getScheduler().runTask(plugin, () -> restoreGameMode(player));
+            return;
+        }
         event.setRespawnLocation(joinLocation());
         int protection = Math.max(0, plugin.getConfig().getInt("event.death.respawn-protection-seconds", 5));
         int slowFalling = Math.max(0, plugin.getConfig().getInt("event.death.slow-falling-seconds", 8));
@@ -657,6 +798,7 @@ final class DragonEventManager implements Listener {
             distributeRewards();
             int delay = Math.max(5, plugin.getConfig().getInt("event.finish-delay-seconds", 120));
             messages.broadcast("victory", Map.of("time", formatTime(delay)), "victory");
+            startVictoryFireworks();
             startClosingCountdown(delay);
         } else {
             finishTask = Bukkit.getScheduler().runTaskLater(plugin, this::evacuateAndReset, 20L);
@@ -697,6 +839,62 @@ final class DragonEventManager implements Listener {
         Map<String, String> replacements = Map.of("time", formatTime(closingSecondsLeft));
         for (Player player : eventWorld.getPlayers()) {
             player.sendActionBar(messages.getRaw("closing-actionbar", replacements));
+        }
+    }
+
+    private void startVictoryFireworks() {
+        cancelVictoryFireworks();
+        if (eventWorld == null || !plugin.getConfig().getBoolean("victory-fireworks.enabled", true)) return;
+        int waves = Math.max(1, plugin.getConfig().getInt("victory-fireworks.waves", 4));
+        int interval = Math.max(2, plugin.getConfig().getInt("victory-fireworks.interval-ticks", 12));
+        int[] remaining = {waves};
+        victoryFireworkTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (state != EventState.FINISHING || eventWorld == null || remaining[0]-- <= 0) {
+                cancelVictoryFireworks();
+                return;
+            }
+            launchVictoryFireworkWave();
+        }, 0L, interval);
+    }
+
+    private void launchVictoryFireworkWave() {
+        DragonBattle battle = eventWorld.getEnderDragonBattle();
+        Location center = portalLocation(battle);
+        if (center == null) center = joinLocation();
+        int amount = Math.max(1, plugin.getConfig().getInt("victory-fireworks.fireworks-per-wave", 5));
+        int power = Math.max(0, Math.min(2, plugin.getConfig().getInt("victory-fireworks.power", 1)));
+        Color[] colors = {
+                Color.fromRGB(255, 43, 214),
+                Color.fromRGB(56, 255, 101),
+                Color.fromRGB(255, 215, 0),
+                Color.fromRGB(55, 220, 255)
+        };
+        FireworkEffect.Type[] types = {
+                FireworkEffect.Type.BALL_LARGE,
+                FireworkEffect.Type.STAR,
+                FireworkEffect.Type.BURST
+        };
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        for (int index = 0; index < amount; index++) {
+            double angle = random.nextDouble(Math.PI * 2.0);
+            double radius = random.nextDouble(2.0, 10.0);
+            Location launch = center.clone().add(Math.cos(angle) * radius, 2.0, Math.sin(angle) * radius);
+            Firework firework = eventWorld.spawn(launch, Firework.class);
+            FireworkMeta meta = firework.getFireworkMeta();
+            Color primary = colors[random.nextInt(colors.length)];
+            Color fade = colors[random.nextInt(colors.length)];
+            meta.addEffect(FireworkEffect.builder()
+                    .with(types[random.nextInt(types.length)])
+                    .withColor(primary)
+                    .withFade(fade)
+                    .trail(true)
+                    .flicker(true)
+                    .build());
+            meta.setPower(power);
+            firework.setFireworkMeta(meta);
+            firework.setVelocity(new Vector(random.nextDouble(-0.12, 0.12), 0.8,
+                    random.nextDouble(-0.12, 0.12)));
+            firework.addScoreboardTag("townysmp_dragon_victory");
         }
     }
 
@@ -846,6 +1044,8 @@ final class DragonEventManager implements Listener {
         originalAllowFlight.clear();
         originalFlying.clear();
         voidRescueCooldown.clear();
+        aprilCreeper = null;
+        eventMode = EventMode.NORMAL;
         fightSecondsLeft = 0;
         closingSecondsLeft = 0;
         state = EventState.IDLE;
@@ -916,6 +1116,22 @@ final class DragonEventManager implements Listener {
         departedParticipants.add(event.getPlayer().getUniqueId());
         restoreGameMode(event.getPlayer());
         Bukkit.getScheduler().runTask(plugin, this::checkForBattleLoss);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onEventEndPortalTeleport(PlayerTeleportEvent event) {
+        if (event.getCause() != PlayerTeleportEvent.TeleportCause.END_PORTAL
+                || eventWorld == null || !event.getFrom().getWorld().equals(eventWorld)) return;
+        event.setCancelled(true);
+        if (state == EventState.FINISHING) {
+            departedParticipants.add(event.getPlayer().getUniqueId());
+            restoreGameMode(event.getPlayer());
+            Bukkit.getScheduler().runTask(plugin, () -> runFallback(event.getPlayer()));
+            return;
+        }
+        if (plugin.getConfig().getBoolean("event.lock-exit-until-victory", true)) {
+            messages.send(event.getPlayer(), "exit-locked");
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -1169,6 +1385,8 @@ final class DragonEventManager implements Listener {
         cancelFightTasks();
         cancelClosingCountdown();
         cancelSpectatorGuard();
+        cancelAprilVisual();
+        cancelVictoryFireworks();
         if (resetTask != null) resetTask.cancel();
         resetTask = null;
     }
@@ -1188,6 +1406,18 @@ final class DragonEventManager implements Listener {
     private void cancelSpectatorGuard() {
         if (spectatorGuardTask != null) spectatorGuardTask.cancel();
         spectatorGuardTask = null;
+    }
+
+    private void cancelAprilVisual() {
+        if (aprilVisualTask != null) aprilVisualTask.cancel();
+        aprilVisualTask = null;
+        if (aprilCreeper != null && aprilCreeper.isValid()) aprilCreeper.remove();
+        aprilCreeper = null;
+    }
+
+    private void cancelVictoryFireworks() {
+        if (victoryFireworkTask != null) victoryFireworkTask.cancel();
+        victoryFireworkTask = null;
     }
 
     private static String formatTime(int seconds) {

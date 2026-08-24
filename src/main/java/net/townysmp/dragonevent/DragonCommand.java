@@ -48,12 +48,28 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
             case "stats" -> showStats(sender, args);
             case "start" -> {
                 if (!admin(sender)) return true;
+                EventMode mode = EventMode.NORMAL;
                 Integer seconds = null;
                 if (args.length > 1) {
-                    try { seconds = Integer.parseInt(args[1]); }
-                    catch (NumberFormatException ignored) { sender.sendMessage("Usage: /dragon start [join-seconds]"); return true; }
+                    EventMode parsed = EventMode.parse(args[1]);
+                    if (parsed != null) {
+                        mode = parsed;
+                        if (args.length > 2) {
+                            try { seconds = Integer.parseInt(args[2]); }
+                            catch (NumberFormatException ignored) {
+                                sender.sendMessage("Usage: /dragon start [normal|april_fools] [countdown-seconds]");
+                                return true;
+                            }
+                        }
+                    } else {
+                        try { seconds = Integer.parseInt(args[1]); }
+                        catch (NumberFormatException ignored) {
+                            sender.sendMessage("Usage: /dragon start [normal|april_fools] [countdown-seconds]");
+                            return true;
+                        }
+                    }
                 }
-                if (!manager.start(seconds)) sender.sendMessage("The Dragon Event is already running.");
+                if (!manager.start(seconds, mode)) sender.sendMessage("The Dragon Event is already running or could not be prepared.");
             }
             case "stop" -> {
                 if (admin(sender)) manager.stop();
@@ -157,12 +173,22 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
     private void status(CommandSender sender) {
         messages.send(sender, "status", Map.of(
                 "state", manager.state().name(),
-                "players", Integer.toString(manager.playerCount())));
+                "players", Integer.toString(manager.playerCount()),
+                "mode", manager.eventMode().commandName()));
     }
 
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                  @NotNull String alias, @NotNull String[] args) {
+        if (args.length == 2 && args[0].equalsIgnoreCase("start")
+                && sender.hasPermission("townysmp.dragon.admin")) {
+            String prefix = args[1].toLowerCase(Locale.ROOT);
+            return List.of("normal", "april_fools").stream().filter(value -> value.startsWith(prefix)).toList();
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("start")
+                && EventMode.parse(args[1]) != null && sender.hasPermission("townysmp.dragon.admin")) {
+            return List.of("30", "300", "10800").stream().filter(value -> value.startsWith(args[2])).toList();
+        }
         if (args.length != 1) return List.of();
         List<String> choices = new ArrayList<>(List.of("join", "leave", "status", "stats"));
         if (sender.hasPermission("townysmp.dragon.admin")) {
