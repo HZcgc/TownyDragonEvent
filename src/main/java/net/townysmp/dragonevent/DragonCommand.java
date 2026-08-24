@@ -54,17 +54,23 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
                     EventMode parsed = EventMode.parse(args[1]);
                     if (parsed != null) {
                         mode = parsed;
-                        if (args.length > 2) {
-                            try { seconds = Integer.parseInt(args[2]); }
+                        int secondsIndex = 2;
+                        if (args[1].equalsIgnoreCase("april") && args.length > 2
+                                && args[2].equalsIgnoreCase("fools")) {
+                            mode = EventMode.APRIL_FOOLS;
+                            secondsIndex = 3;
+                        }
+                        if (args.length > secondsIndex) {
+                            try { seconds = Integer.parseInt(args[secondsIndex]); }
                             catch (NumberFormatException ignored) {
-                                sender.sendMessage("Usage: /dragon start [normal|april_fools] [countdown-seconds]");
+                                sender.sendMessage("Usage: /dragon start [normal|april_fools|april fools] [countdown-seconds]");
                                 return true;
                             }
                         }
                     } else {
                         try { seconds = Integer.parseInt(args[1]); }
                         catch (NumberFormatException ignored) {
-                            sender.sendMessage("Usage: /dragon start [normal|april_fools] [countdown-seconds]");
+                            sender.sendMessage("Usage: /dragon start [normal|april_fools|april fools] [countdown-seconds]");
                             return true;
                         }
                     }
@@ -184,6 +190,17 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
                 && sender.hasPermission("townysmp.dragon.admin")) {
             String prefix = args[1].toLowerCase(Locale.ROOT);
             return List.of("normal", "april_fools").stream().filter(value -> value.startsWith(prefix)).toList();
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("start")
+                && args[1].equalsIgnoreCase("april") && sender.hasPermission("townysmp.dragon.admin")) {
+            String prefix = args[2].toLowerCase(Locale.ROOT);
+            return List.of("fools", "30", "300", "10800").stream()
+                    .filter(value -> value.startsWith(prefix)).toList();
+        }
+        if (args.length == 4 && args[0].equalsIgnoreCase("start")
+                && args[1].equalsIgnoreCase("april") && args[2].equalsIgnoreCase("fools")
+                && sender.hasPermission("townysmp.dragon.admin")) {
+            return List.of("30", "300", "10800").stream().filter(value -> value.startsWith(args[3])).toList();
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("start")
                 && EventMode.parse(args[1]) != null && sender.hasPermission("townysmp.dragon.admin")) {

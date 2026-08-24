@@ -56,6 +56,15 @@ event:
   fight-time-limit-seconds: 900
   minimum-players: 1
   block-building: true
+  arena-destruction:
+    # The runtime arena is disposable, so players, TNT, beds, respawn anchors,
+    # April Fools projectiles and the Dragon may tear it apart during combat.
+    # The template world remains untouched and restores the arena next event.
+    enabled: true
+    dragon-griefing: true
+    # Re-enables explosion block damage if a protection plugin cancelled it.
+    # This only applies inside dragonevent_end while the fight is ACTIVE.
+    force-explosions: true
   # Players below this damage receive no participation or damage-tier rewards.
   minimum-reward-damage: 25.0
   # Removes the event world's exit portal until the Dragon is defeated.

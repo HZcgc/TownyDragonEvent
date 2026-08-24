@@ -30,6 +30,7 @@ import org.bukkit.entity.TNTPrimed;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
@@ -274,6 +275,8 @@ final class DragonEventManager implements Listener {
         }
         eventWorld.setAutoSave(false);
         eventWorld.setGameRule(GameRule.DO_MOB_SPAWNING, false);
+        eventWorld.setGameRule(GameRule.MOB_GRIEFING,
+                plugin.getConfig().getBoolean("event.arena-destruction.dragon-griefing", true));
         eventWorld.setGameRule(GameRule.KEEP_INVENTORY, plugin.getConfig().getBoolean("event.death.keep-inventory", true));
         eventWorld.setGameRule(GameRule.DO_IMMEDIATE_RESPAWN, plugin.getConfig().getBoolean("event.death.immediate-respawn", true));
         eventWorld.setGameRule(GameRule.SHOW_DEATH_MESSAGES, true);
@@ -626,11 +629,30 @@ final class DragonEventManager implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
-    public void onAprilExplosion(EntityExplodeEvent event) {
-        if (event.getEntity().getScoreboardTags().contains("townysmp_april_projectile")) {
+    public void onArenaEntityExplosion(EntityExplodeEvent event) {
+        boolean aprilProjectile = event.getEntity().getScoreboardTags().contains("townysmp_april_projectile");
+        if (!isArenaDestructionAllowed(event.getLocation().getWorld())) {
+            if (!aprilProjectile) return;
             event.blockList().clear();
             event.setYield(0.0f);
+            return;
         }
+        if (plugin.getConfig().getBoolean("event.arena-destruction.force-explosions", true)) {
+            event.setCancelled(false);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onArenaBlockExplosion(BlockExplodeEvent event) {
+        if (isArenaDestructionAllowed(event.getBlock().getWorld())
+                && plugin.getConfig().getBoolean("event.arena-destruction.force-explosions", true)) {
+            event.setCancelled(false);
+        }
+    }
+
+    private boolean isArenaDestructionAllowed(World world) {
+        return state == EventState.ACTIVE && eventWorld != null && world.equals(eventWorld)
+                && plugin.getConfig().getBoolean("event.arena-destruction.enabled", true);
     }
 
     private void startFightClock() {
