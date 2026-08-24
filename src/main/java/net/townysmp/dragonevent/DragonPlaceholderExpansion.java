@@ -32,6 +32,8 @@ final class DragonPlaceholderExpansion extends PlaceholderExpansion {
         if (key.equals("seconds_remaining")) return Integer.toString(event.secondsRemaining());
         if (key.equals("fight_time_remaining")) return event.fightTimeRemaining();
         if (key.equals("fight_seconds_remaining")) return Integer.toString(event.fightSecondsRemaining());
+        if (key.equals("closing_time_remaining")) return event.closingTimeRemaining();
+        if (key.equals("closing_seconds_remaining")) return Integer.toString(event.closingSecondsRemaining());
         if (key.equals("registered_count")) return Integer.toString(event.playerCount());
         if (key.equals("season")) return stats.season();
         if (key.equals("server_record_damage")) return format(stats.serverRecordDamage());
@@ -41,6 +43,7 @@ final class DragonPlaceholderExpansion extends PlaceholderExpansion {
         return switch (key) {
             case "registered" -> Boolean.toString(event.isRegistered(uuid));
             case "spectator" -> Boolean.toString(event.isSpectator(uuid));
+            case "departed" -> Boolean.toString(event.hasDeparted(uuid));
             case "damage" -> format(event.currentDamage(uuid));
             case "deaths" -> Integer.toString(event.currentDeaths(uuid));
             case "rank" -> Integer.toString(event.currentRank(uuid));

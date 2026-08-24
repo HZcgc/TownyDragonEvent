@@ -7,6 +7,13 @@ world:
   runtime-name: dragonevent_end
   join-location: { x: 0.5, y: 65.0, z: 18.5, yaw: 180.0, pitch: 0.0 }
   fallback-command: spawn {player}
+  border:
+    enabled: true
+    center-x: 0.0
+    center-z: 0.0
+    # Diameter in blocks. Spectators are additionally prevented from crossing it.
+    size: 512.0
+    warning-distance: 16
   # Prevents clients entering world_the_end while it is briefly saved and
   # cloned. Only applies when template-folder is empty.
   protect-vanilla-portal-during-copy: true
@@ -18,7 +25,6 @@ event:
   dragon-health: 1000.0
   fight-time-limit-seconds: 900
   minimum-players: 1
-  one-account-per-ip: true
   block-building: true
   # Players below this damage receive no participation or damage-tier rewards.
   minimum-reward-damage: 25.0
@@ -96,6 +102,11 @@ notifications:
     sound: minecraft:ui.toast.challenge_complete
     volume: 1.0
     pitch: 1.0
+    title: true
+  defeat:
+    sound: minecraft:entity.ender_dragon.growl
+    volume: 1.0
+    pitch: 0.6
     title: true
 rewards:
   # Per-player variables: {player}, {uuid}, {damage}, {rank}, {players}, {player_count}
