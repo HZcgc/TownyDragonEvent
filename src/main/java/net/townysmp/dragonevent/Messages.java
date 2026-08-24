@@ -14,6 +14,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
+import java.util.List;
 
 final class Messages {
     private final TownyDragonEventPlugin plugin;
@@ -78,8 +79,23 @@ final class Messages {
         for (Player player : Bukkit.getOnlinePlayers()) {
             player.sendMessage(chat);
             if (titleEnabled) player.showTitle(title);
-            if (sound != null && !sound.isBlank()) player.playSound(player.getLocation(), sound, volume, pitch);
+            List<String> sounds = plugin.getConfig().getStringList(root + ".sounds");
+            if (sounds.isEmpty() && sound != null && !sound.isBlank()) {
+                player.playSound(player.getLocation(), sound, volume, pitch);
+            }
+            for (String entry : sounds) {
+                String[] parts = entry.split(";");
+                if (parts.length == 0 || parts[0].isBlank()) continue;
+                float entryVolume = parts.length > 1 ? parseFloat(parts[1], volume) : volume;
+                float entryPitch = parts.length > 2 ? parseFloat(parts[2], pitch) : pitch;
+                player.playSound(player.getLocation(), parts[0], entryVolume, entryPitch);
+            }
         }
         Bukkit.getConsoleSender().sendMessage(chat);
+    }
+
+    private float parseFloat(String value, float fallback) {
+        try { return Float.parseFloat(value); }
+        catch (NumberFormatException ignored) { return fallback; }
     }
 }

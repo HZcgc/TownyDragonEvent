@@ -57,6 +57,8 @@ final class DragonEventManager implements Listener {
     private World eventWorld;
     private EnderDragon dragon;
     private BukkitTask ticker;
+    private BukkitTask finishTask;
+    private BukkitTask resetTask;
     private int secondsLeft;
 
     DragonEventManager(TownyDragonEventPlugin plugin, Messages messages) {
@@ -284,16 +286,18 @@ final class DragonEventManager implements Listener {
             distributeRewards();
             int delay = plugin.getConfig().getInt("event.finish-delay-seconds", 20);
             messages.broadcast("victory", Map.of("time", formatTime(delay)), "victory");
-            Bukkit.getScheduler().runTaskLater(plugin, this::evacuateAndReset, Math.max(5, delay) * 20L);
+            finishTask = Bukkit.getScheduler().runTaskLater(plugin, this::evacuateAndReset, Math.max(5, delay) * 20L);
         } else {
-            Bukkit.getScheduler().runTaskLater(plugin, this::evacuateAndReset, 20L);
+            finishTask = Bukkit.getScheduler().runTaskLater(plugin, this::evacuateAndReset, 20L);
         }
     }
 
     void stop() {
         if (state == EventState.IDLE) return;
         Bukkit.broadcast(messages.get("stopped"));
-        finish(false);
+        cancelEventTasks();
+        if (dragon != null && dragon.isValid()) dragon.remove();
+        evacuateAndReset();
     }
 
     private void distributeRewards() {
@@ -318,11 +322,12 @@ final class DragonEventManager implements Listener {
     }
 
     private void evacuateAndReset() {
+        cancelFinishTask();
         state = EventState.RESETTING;
         if (eventWorld != null) {
             for (Player player : new ArrayList<>(eventWorld.getPlayers())) returnPlayer(player);
         }
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        resetTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (eventWorld != null) Bukkit.unloadWorld(eventWorld, false);
             eventWorld = null;
             dragon = null;
@@ -335,6 +340,7 @@ final class DragonEventManager implements Listener {
     }
 
     private void clearSession() {
+        cancelEventTasks();
         participants.clear();
         returnLocations.clear();
         joinedIps.clear();
@@ -353,7 +359,7 @@ final class DragonEventManager implements Listener {
     }
 
     void shutdown() {
-        cancelTicker();
+        cancelEventTasks();
         if (eventWorld != null) {
             for (Player player : new ArrayList<>(eventWorld.getPlayers())) returnPlayer(player);
             Bukkit.unloadWorld(eventWorld, false);
@@ -370,8 +376,7 @@ final class DragonEventManager implements Listener {
 
     private void returnPlayer(Player player) {
         Location location = returnLocations.remove(player.getUniqueId());
-        if (location != null && location.getWorld() != null) player.teleportAsync(location);
-        else runFallback(player);
+        if (location == null || location.getWorld() == null || !player.teleport(location)) runFallback(player);
     }
 
     private void runFallback(Player player) {
@@ -413,6 +418,18 @@ final class DragonEventManager implements Listener {
     private void cancelTicker() {
         if (ticker != null) ticker.cancel();
         ticker = null;
+    }
+
+    private void cancelFinishTask() {
+        if (finishTask != null) finishTask.cancel();
+        finishTask = null;
+    }
+
+    private void cancelEventTasks() {
+        cancelTicker();
+        cancelFinishTask();
+        if (resetTask != null) resetTask.cancel();
+        resetTask = null;
     }
 
     private static String formatTime(int seconds) {
