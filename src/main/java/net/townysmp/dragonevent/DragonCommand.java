@@ -151,13 +151,17 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
                 "damage", format(stats.totalDamage(target.getUniqueId())),
                 "participations", Integer.toString(stats.participations(target.getUniqueId())),
                 "wins", Integer.toString(stats.wins(target.getUniqueId())),
-                "deaths", Integer.toString(stats.deaths(target.getUniqueId()))));
+                "deaths", Integer.toString(stats.deaths(target.getUniqueId())),
+                "crystals", Integer.toString(stats.crystals(target.getUniqueId())),
+                "explosions", Integer.toString(stats.explosions(target.getUniqueId()))));
         messages.send(sender, "stats-season", Map.of(
                 "season", stats.season(),
                 "season_damage", format(stats.seasonDamage(target.getUniqueId())),
                 "season_participations", Integer.toString(stats.seasonParticipations(target.getUniqueId())),
                 "season_wins", Integer.toString(stats.seasonWins(target.getUniqueId())),
-                "season_deaths", Integer.toString(stats.seasonDeaths(target.getUniqueId()))));
+                "season_deaths", Integer.toString(stats.seasonDeaths(target.getUniqueId())),
+                "season_crystals", Integer.toString(stats.seasonCrystals(target.getUniqueId())),
+                "season_explosions", Integer.toString(stats.seasonExplosions(target.getUniqueId()))));
         messages.send(sender, "stats-best", Map.of(
                 "personal_best", format(stats.personalBest(target.getUniqueId())), "best_rank", bestRank));
     }
@@ -180,6 +184,8 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
         messages.send(sender, "status", Map.of(
                 "state", manager.state().name(),
                 "players", Integer.toString(manager.playerCount()),
+                "fighters", Integer.toString(manager.fighterCount()),
+                "spectators", Integer.toString(manager.spectatorCount()),
                 "mode", manager.eventMode().commandName()));
     }
 

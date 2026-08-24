@@ -7,6 +7,7 @@ import org.bukkit.GameRule;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.WorldBorder;
 import org.bukkit.WorldCreator;
@@ -16,6 +17,7 @@ import org.bukkit.boss.DragonBattle;
 import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.type.RespawnAnchor;
 import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Entity;
@@ -30,6 +32,7 @@ import org.bukkit.entity.TNTPrimed;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
@@ -40,6 +43,7 @@ import org.bukkit.event.entity.ItemSpawnEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerPortalEvent;
@@ -57,8 +61,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -72,6 +78,7 @@ import java.util.logging.Level;
 
 final class DragonEventManager implements Listener {
     private static final int[][] CRYSTAL_OFFSETS = {{3, 0}, {0, 3}, {-3, 0}, {0, -3}};
+    private record PendingExplosion(UUID owner, long expiresAt) {}
 
     private final TownyDragonEventPlugin plugin;
     private final Messages messages;
@@ -82,6 +89,13 @@ final class DragonEventManager implements Listener {
     private final Set<UUID> departedParticipants = new HashSet<>();
     private final Map<UUID, Double> damage = new HashMap<>();
     private final Map<UUID, Integer> eventDeaths = new HashMap<>();
+    private final Map<UUID, Integer> crystalsDestroyed = new HashMap<>();
+    private final Map<UUID, Integer> explosionsTriggered = new HashMap<>();
+    private final Map<UUID, UUID> explosiveOwners = new HashMap<>();
+    private final Map<String, PendingExplosion> pendingBlockExplosions = new HashMap<>();
+    private final Set<UUID> countedCrystals = new HashSet<>();
+    private final Deque<UUID> primedTnt = new ArrayDeque<>();
+    private final Deque<UUID> aprilProjectiles = new ArrayDeque<>();
     private final Map<UUID, GameMode> originalGameModes = new HashMap<>();
     private final Map<UUID, Boolean> originalAllowFlight = new HashMap<>();
     private final Map<UUID, Boolean> originalFlying = new HashMap<>();
@@ -104,6 +118,12 @@ final class DragonEventManager implements Listener {
     private int secondsLeft;
     private int fightSecondsLeft;
     private int closingSecondsLeft;
+    private double effectiveDragonHealth;
+    private double incomingDamageMultiplier = 1.0;
+    private double dragonAttackMultiplier = 1.0;
+    private Location lastDragonLocation;
+    private int dragonStationarySeconds;
+    private boolean spawningScaledProjectile;
 
     DragonEventManager(TownyDragonEventPlugin plugin, Messages messages, StatsManager stats) {
         this.plugin = plugin;
@@ -118,6 +138,8 @@ final class DragonEventManager implements Listener {
     boolean isRegistered(UUID uuid) { return participants.contains(uuid); }
     double currentDamage(UUID uuid) { return damage.getOrDefault(uuid, 0.0); }
     int currentDeaths(UUID uuid) { return eventDeaths.getOrDefault(uuid, 0); }
+    int currentCrystals(UUID uuid) { return crystalsDestroyed.getOrDefault(uuid, 0); }
+    int currentExplosions(UUID uuid) { return explosionsTriggered.getOrDefault(uuid, 0); }
     boolean isSpectator(UUID uuid) { return spectators.contains(uuid); }
     boolean hasDeparted(UUID uuid) { return departedParticipants.contains(uuid); }
     int fightSecondsRemaining() { return Math.max(0, fightSecondsLeft); }
@@ -125,6 +147,8 @@ final class DragonEventManager implements Listener {
     int closingSecondsRemaining() { return Math.max(0, closingSecondsLeft); }
     String closingTimeRemaining() { return formatTime(closingSecondsRemaining()); }
     EventMode eventMode() { return eventMode; }
+    int fighterCount() { return activeFighterCount(); }
+    int spectatorCount() { return activeSpectatorCount(); }
     void setExitLocation(Player player) {
         Location location = player.getLocation();
         plugin.getConfig().set("world.exit-location.world", location.getWorld().getName());
@@ -339,6 +363,8 @@ final class DragonEventManager implements Listener {
         }
         damage.put(player.getUniqueId(), 0.0);
         eventDeaths.put(player.getUniqueId(), 0);
+        crystalsDestroyed.put(player.getUniqueId(), 0);
+        explosionsTriggered.put(player.getUniqueId(), 0);
         if (state == EventState.SCHEDULED) {
             messages.send(player, "registered");
         } else {
@@ -364,6 +390,8 @@ final class DragonEventManager implements Listener {
         spectators.remove(uuid);
         damage.remove(uuid);
         eventDeaths.remove(uuid);
+        crystalsDestroyed.remove(uuid);
+        explosionsTriggered.remove(uuid);
         restoreGameMode(player);
         runFallback(player);
         messages.send(player, "left");
@@ -379,7 +407,7 @@ final class DragonEventManager implements Listener {
 
     private void teleportToEvent(Player player) {
         if (eventWorld == null || player.getWorld().equals(eventWorld)) return;
-        player.teleportAsync(joinLocation());
+        player.teleportAsync(safeJoinLocation());
     }
 
     private void beginRespawn() {
@@ -489,9 +517,20 @@ final class DragonEventManager implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onSpawn(EntitySpawnEvent event) {
-        if (state == EventState.RESPAWNING && event.getLocation().getWorld().equals(eventWorld)
-                && event.getEntity() instanceof EnderDragon spawned) {
+        if (eventWorld == null || !event.getLocation().getWorld().equals(eventWorld)) return;
+        if (state == EventState.RESPAWNING && event.getEntity() instanceof EnderDragon spawned) {
             Bukkit.getScheduler().runTask(plugin, () -> activateDragon(spawned));
+        }
+        if (state == EventState.ACTIVE && event.getEntity() instanceof TNTPrimed tnt) {
+            Player owner = resolvePlayer(tnt);
+            if (owner != null && participants.contains(owner.getUniqueId())) {
+                explosiveOwners.put(tnt.getUniqueId(), owner.getUniqueId());
+                tnt.addScoreboardTag("townysmp_player_tnt");
+                tnt.setYield((float) boundedExplosionPower(
+                        "event.arena-destruction.explosion-power.player-tnt", 4.0));
+            }
+            registerLimitedEntity(tnt, primedTnt,
+                    plugin.getConfig().getInt("event.arena-destruction.limits.maximum-primed-tnt", 50));
         }
     }
 
@@ -499,20 +538,47 @@ final class DragonEventManager implements Listener {
         if (state != EventState.RESPAWNING) return;
         cancelTicker();
         dragon = spawned;
-        double health = Math.min(1024.0, Math.max(1.0, plugin.getConfig().getDouble("event.dragon-health", 1000.0)));
+        double health = configureDifficulty();
         AttributeInstance maxHealth = dragon.getAttribute(Attribute.MAX_HEALTH);
         if (maxHealth != null) maxHealth.setBaseValue(health);
         dragon.setHealth(health);
         boolean aprilFools = eventMode == EventMode.APRIL_FOOLS;
         String nameKey = aprilFools ? "dragon-name-april" : "dragon-name";
-        dragon.customName(messages.getRaw(nameKey, Map.of("health", String.format(Locale.US, "%.0f", health))));
+        dragon.customName(messages.getRaw(nameKey, Map.of("health", String.format(Locale.US, "%.0f", effectiveDragonHealth))));
         if (aprilFools) startAprilFoolsVisual();
         eventWorld.setGameRule(GameRule.DO_MOB_SPAWNING, true);
         state = EventState.ACTIVE;
+        lastDragonLocation = dragon.getLocation().clone();
+        dragonStationarySeconds = 0;
         startFightClock();
         messages.broadcast(aprilFools ? "fight-start-april" : "fight-start",
-                Map.of("health", String.format(Locale.US, "%.0f", health)), aprilFools ? "april-fight" : "fight");
+                Map.of("health", String.format(Locale.US, "%.0f", effectiveDragonHealth),
+                        "fighters", Integer.toString(activeFighterCount())), aprilFools ? "april-fight" : "fight");
         checkForBattleLoss();
+    }
+
+    private double configureDifficulty() {
+        double baseHealth = Math.max(1.0, plugin.getConfig().getDouble("event.dragon-health", 1000.0));
+        int fighters = Math.max(1, activeFighterCount());
+        if (!plugin.getConfig().getBoolean("event.difficulty-scaling.enabled", true)) {
+            effectiveDragonHealth = Math.min(1024.0, baseHealth);
+            incomingDamageMultiplier = 1.0;
+            dragonAttackMultiplier = 1.0;
+            return effectiveDragonHealth;
+        }
+        double healthPerFighter = Math.max(0.0,
+                plugin.getConfig().getDouble("event.difficulty-scaling.health-per-additional-fighter", 125.0));
+        double maximumEffective = Math.max(baseHealth,
+                plugin.getConfig().getDouble("event.difficulty-scaling.maximum-effective-health", 5000.0));
+        effectiveDragonHealth = Math.min(maximumEffective, baseHealth + Math.max(0, fighters - 1) * healthPerFighter);
+        double physicalHealth = Math.min(1024.0, effectiveDragonHealth);
+        incomingDamageMultiplier = Math.min(1.0, physicalHealth / effectiveDragonHealth);
+        double attackPerFighter = Math.max(0.0,
+                plugin.getConfig().getDouble("event.difficulty-scaling.attack-multiplier-per-additional-fighter", 0.05));
+        double maximumAttack = Math.max(1.0,
+                plugin.getConfig().getDouble("event.difficulty-scaling.maximum-attack-multiplier", 2.0));
+        dragonAttackMultiplier = Math.min(maximumAttack, 1.0 + Math.max(0, fighters - 1) * attackPerFighter);
+        return physicalHealth;
     }
 
     private void startAprilFoolsVisual() {
@@ -566,6 +632,30 @@ final class DragonEventManager implements Listener {
         }
     }
 
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onScaledDragonDamage(EntityDamageEvent event) {
+        if (state != EventState.ACTIVE || event.getEntity() != dragon) return;
+        event.setDamage(event.getDamage() * incomingDamageMultiplier);
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onScaledBossAttack(EntityDamageByEntityEvent event) {
+        if (state != EventState.ACTIVE || !(event.getEntity() instanceof Player player)
+                || !participants.contains(player.getUniqueId()) || !isBossDamage(event.getDamager())) return;
+        event.setDamage(event.getDamage() * dragonAttackMultiplier);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCrystalDestroyed(EntityDamageByEntityEvent event) {
+        if (state != EventState.ACTIVE || !(event.getEntity() instanceof EnderCrystal crystal)
+                || eventWorld == null || !crystal.getWorld().equals(eventWorld)
+                || !countedCrystals.add(crystal.getUniqueId())) return;
+        Player player = resolvePlayer(event.getDamager());
+        if (player != null && participants.contains(player.getUniqueId())) {
+            crystalsDestroyed.merge(player.getUniqueId(), 1, Integer::sum);
+        }
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onDamage(EntityDamageByEntityEvent event) {
         if (state != EventState.ACTIVE || event.getEntity() != dragon) return;
@@ -591,17 +681,65 @@ final class DragonEventManager implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onAprilDragonProjectile(ProjectileLaunchEvent event) {
-        if (eventMode != EventMode.APRIL_FOOLS || state != EventState.ACTIVE
-                || !(event.getEntity() instanceof DragonFireball fireball)
-                || fireball.getShooter() != dragon) return;
+    public void onDragonProjectile(ProjectileLaunchEvent event) {
+        if (spawningScaledProjectile || state != EventState.ACTIVE
+                || !(event.getEntity() instanceof DragonFireball fireball) || fireball.getShooter() != dragon) return;
         Location source = fireball.getLocation().clone();
         Vector direction = fireball.getVelocity().clone();
         if (direction.lengthSquared() < 0.01) direction = dragon.getLocation().getDirection();
         direction.normalize();
-        event.setCancelled(true);
         Vector finalDirection = direction;
-        Bukkit.getScheduler().runTask(plugin, () -> launchAprilProjectile(source, finalDirection));
+        double originalSpeed = Math.max(0.8, fireball.getVelocity().length());
+        int volley = projectileVolleySize();
+        if (eventMode == EventMode.APRIL_FOOLS) event.setCancelled(true);
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            for (int index = eventMode == EventMode.APRIL_FOOLS ? 0 : 1; index < volley; index++) {
+                Vector spread = eventMode == EventMode.APRIL_FOOLS
+                        ? spreadDirection(finalDirection, index, volley)
+                        : additionalSpreadDirection(finalDirection, index);
+                if (eventMode == EventMode.APRIL_FOOLS) launchAprilProjectile(source, spread);
+                else launchAdditionalDragonFireball(source, spread, originalSpeed);
+            }
+        });
+    }
+
+    private int projectileVolleySize() {
+        if (!plugin.getConfig().getBoolean("event.difficulty-scaling.enabled", true)) return 1;
+        int every = Math.max(1,
+                plugin.getConfig().getInt("event.difficulty-scaling.projectiles.additional-every-fighters", 8));
+        int maximum = Math.max(1,
+                plugin.getConfig().getInt("event.difficulty-scaling.projectiles.maximum-per-volley", 3));
+        return Math.min(maximum, 1 + Math.max(0, activeFighterCount() - 1) / every);
+    }
+
+    private Vector spreadDirection(Vector direction, int index, int total) {
+        if (total <= 1) return direction.clone();
+        double spread = Math.toRadians(Math.max(0.0,
+                plugin.getConfig().getDouble("event.difficulty-scaling.projectiles.spread-degrees", 10.0)));
+        double offset = (index - (total - 1) / 2.0) * spread;
+        return direction.clone().rotateAroundY(offset).normalize();
+    }
+
+    private Vector additionalSpreadDirection(Vector direction, int index) {
+        double spread = Math.toRadians(Math.max(0.0,
+                plugin.getConfig().getDouble("event.difficulty-scaling.projectiles.spread-degrees", 10.0)));
+        int step = (index + 1) / 2;
+        double offset = (index % 2 == 1 ? -1.0 : 1.0) * step * spread;
+        return direction.clone().rotateAroundY(offset).normalize();
+    }
+
+    private void launchAdditionalDragonFireball(Location source, Vector direction, double speed) {
+        if (state != EventState.ACTIVE || eventWorld == null || dragon == null || !dragon.isValid()) return;
+        spawningScaledProjectile = true;
+        try {
+            DragonFireball extra = eventWorld.spawn(source, DragonFireball.class);
+            extra.addScoreboardTag("townysmp_scaled_dragon_projectile");
+            extra.setShooter(dragon);
+            extra.setDirection(direction);
+            extra.setVelocity(direction.clone().multiply(speed));
+        } finally {
+            spawningScaledProjectile = false;
+        }
     }
 
     private void launchAprilProjectile(Location source, Vector direction) {
@@ -612,8 +750,14 @@ final class DragonEventManager implements Listener {
         if (ThreadLocalRandom.current().nextDouble() < tntChance) {
             TNTPrimed tnt = eventWorld.spawn(source, TNTPrimed.class);
             tnt.setFuseTicks(Math.max(10, plugin.getConfig().getInt("april-fools.projectiles.tnt-fuse-ticks", 45)));
+            tnt.setYield((float) boundedExplosionPower(
+                    "event.arena-destruction.explosion-power.april-tnt", 5.0));
             tnt.setVelocity(direction.clone().multiply(speed));
             tnt.addScoreboardTag("townysmp_april_projectile");
+            registerLimitedEntity(tnt, primedTnt,
+                    plugin.getConfig().getInt("event.arena-destruction.limits.maximum-primed-tnt", 50));
+            registerLimitedEntity(tnt, aprilProjectiles,
+                    plugin.getConfig().getInt("event.arena-destruction.limits.maximum-april-projectiles", 20));
             eventWorld.playSound(source, "minecraft:entity.creeper.primed", 1.0f, 0.8f);
             return;
         }
@@ -621,18 +765,32 @@ final class DragonEventManager implements Listener {
         ghastFireball.setShooter(aprilCreeper != null ? aprilCreeper : dragon);
         ghastFireball.setDirection(direction);
         ghastFireball.setVelocity(direction.clone().multiply(speed));
-        ghastFireball.setYield((float) Math.max(0.0,
+        ghastFireball.setYield((float) boundedExplosionPower(
+                "event.arena-destruction.explosion-power.april-fireball",
                 plugin.getConfig().getDouble("april-fools.projectiles.fireball-yield", 2.0)));
         ghastFireball.setIsIncendiary(false);
         ghastFireball.addScoreboardTag("townysmp_april_projectile");
+        registerLimitedEntity(ghastFireball, aprilProjectiles,
+                plugin.getConfig().getInt("event.arena-destruction.limits.maximum-april-projectiles", 20));
         eventWorld.playSound(source, "minecraft:entity.ghast.shoot", 1.0f, 0.8f);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onArenaEntityExplosion(EntityExplodeEvent event) {
-        boolean aprilProjectile = event.getEntity().getScoreboardTags().contains("townysmp_april_projectile");
+        if (eventWorld == null || !event.getLocation().getWorld().equals(eventWorld)) return;
+        Player owner = resolvePlayer(event.getEntity());
+        if (state == EventState.ACTIVE && owner != null && participants.contains(owner.getUniqueId())) {
+            explosionsTriggered.merge(owner.getUniqueId(), 1, Integer::sum);
+        }
+        primedTnt.remove(event.getEntity().getUniqueId());
+        aprilProjectiles.remove(event.getEntity().getUniqueId());
+        explosiveOwners.remove(event.getEntity().getUniqueId());
+        if (event.getEntity().getScoreboardTags().contains("townysmp_april_finale")) {
+            event.blockList().clear();
+            event.setYield(0.0f);
+            return;
+        }
         if (!isArenaDestructionAllowed(event.getLocation().getWorld())) {
-            if (!aprilProjectile) return;
             event.blockList().clear();
             event.setYield(0.0f);
             return;
@@ -644,15 +802,68 @@ final class DragonEventManager implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onArenaBlockExplosion(BlockExplodeEvent event) {
+        if (eventWorld == null || !event.getBlock().getWorld().equals(eventWorld)) return;
+        PendingExplosion pending = pendingBlockExplosions.remove(blockKey(event.getBlock()));
+        if (state == EventState.ACTIVE && pending != null && pending.expiresAt() >= System.currentTimeMillis()
+                && participants.contains(pending.owner())) {
+            explosionsTriggered.merge(pending.owner(), 1, Integer::sum);
+        }
         if (isArenaDestructionAllowed(event.getBlock().getWorld())
                 && plugin.getConfig().getBoolean("event.arena-destruction.force-explosions", true)) {
             event.setCancelled(false);
+        } else if (!isArenaDestructionAllowed(event.getBlock().getWorld())) {
+            event.blockList().clear();
+            event.setYield(0.0f);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlayerPrimesBlockExplosion(PlayerInteractEvent event) {
+        if (state != EventState.ACTIVE || event.getAction() != Action.RIGHT_CLICK_BLOCK
+                || event.getClickedBlock() == null || eventWorld == null
+                || !event.getClickedBlock().getWorld().equals(eventWorld)
+                || !participants.contains(event.getPlayer().getUniqueId())) return;
+        Block block = event.getClickedBlock();
+        boolean bed = block.getType().name().endsWith("_BED");
+        boolean chargedAnchor = block.getType() == Material.RESPAWN_ANCHOR
+                && block.getBlockData() instanceof RespawnAnchor anchor && anchor.getCharges() > 0;
+        if (bed || chargedAnchor) {
+            pendingBlockExplosions.put(blockKey(block),
+                    new PendingExplosion(event.getPlayer().getUniqueId(), System.currentTimeMillis() + 2000L));
         }
     }
 
     private boolean isArenaDestructionAllowed(World world) {
         return state == EventState.ACTIVE && eventWorld != null && world.equals(eventWorld)
                 && plugin.getConfig().getBoolean("event.arena-destruction.enabled", true);
+    }
+
+    private double boundedExplosionPower(String path, double fallback) {
+        return Math.max(0.0, Math.min(20.0, plugin.getConfig().getDouble(path, fallback)));
+    }
+
+    private void registerLimitedEntity(Entity entity, Deque<UUID> queue, int configuredMaximum) {
+        UUID uuid = entity.getUniqueId();
+        queue.remove(uuid);
+        queue.removeIf(id -> {
+            Entity existing = Bukkit.getEntity(id);
+            return existing == null || !existing.isValid();
+        });
+        queue.addLast(uuid);
+        int maximum = Math.max(0, configuredMaximum);
+        if (maximum == 0) return;
+        while (queue.size() > maximum) {
+            UUID oldest = queue.removeFirst();
+            Entity limited = Bukkit.getEntity(oldest);
+            if (limited != null && limited.isValid()) limited.remove();
+            explosiveOwners.remove(oldest);
+            primedTnt.remove(oldest);
+            aprilProjectiles.remove(oldest);
+        }
+    }
+
+    private String blockKey(Block block) {
+        return block.getWorld().getUID() + ":" + block.getX() + ":" + block.getY() + ":" + block.getZ();
     }
 
     private void startFightClock() {
@@ -663,6 +874,8 @@ final class DragonEventManager implements Listener {
             if (fightSecondsLeft == 600 || fightSecondsLeft == 300 || fightSecondsLeft == 60) {
                 Bukkit.broadcast(messages.get("fight-time-warning", Map.of("time", formatTime(fightSecondsLeft))));
             }
+            sendFightActionBar();
+            runDragonWatchdog();
             fightSecondsLeft--;
         }, 20L, 20L);
         fightTimeoutTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -672,11 +885,95 @@ final class DragonEventManager implements Listener {
         }, fightSecondsLeft * 20L);
     }
 
+    private void sendFightActionBar() {
+        if (eventWorld == null || !plugin.getConfig().getBoolean("event.fight-actionbar.enabled", true)) return;
+        Map<String, String> replacements = Map.of(
+                "fighters", Integer.toString(activeFighterCount()),
+                "spectators", Integer.toString(activeSpectatorCount()),
+                "time", formatTime(fightSecondsLeft));
+        for (Player player : eventWorld.getPlayers()) {
+            player.sendActionBar(messages.getRaw("fight-actionbar", replacements));
+        }
+    }
+
+    private int activeFighterCount() {
+        int fighters = 0;
+        for (UUID uuid : participants) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (!spectators.contains(uuid) && !departedParticipants.contains(uuid)
+                    && player != null && player.isOnline() && eventWorld != null && player.getWorld().equals(eventWorld)) {
+                fighters++;
+            }
+        }
+        return fighters;
+    }
+
+    private int activeSpectatorCount() {
+        int count = 0;
+        for (UUID uuid : spectators) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (!departedParticipants.contains(uuid) && player != null && player.isOnline()
+                    && eventWorld != null && player.getWorld().equals(eventWorld)) count++;
+        }
+        return count;
+    }
+
+    private void runDragonWatchdog() {
+        if (!plugin.getConfig().getBoolean("event.dragon-watchdog.enabled", true)
+                || dragon == null || !dragon.isValid() || eventWorld == null) return;
+        Location current = dragon.getLocation();
+        double minimumY = plugin.getConfig().getDouble("event.dragon-watchdog.minimum-y", -20.0);
+        double maximumY = plugin.getConfig().getDouble("event.dragon-watchdog.maximum-y", 300.0);
+        boolean outside = current.getY() < minimumY || current.getY() > maximumY
+                || (plugin.getConfig().getBoolean("world.border.enabled", true)
+                && !eventWorld.getWorldBorder().isInside(current));
+        double movement = Math.max(0.25,
+                plugin.getConfig().getDouble("event.dragon-watchdog.minimum-movement-blocks", 2.0));
+        if (lastDragonLocation != null && lastDragonLocation.getWorld() == current.getWorld()
+                && lastDragonLocation.distanceSquared(current) < movement * movement
+                && !dragonMayHoverAtPortal()) {
+            dragonStationarySeconds++;
+        } else {
+            dragonStationarySeconds = 0;
+        }
+        lastDragonLocation = current.clone();
+        int maximumStationary = Math.max(10,
+                plugin.getConfig().getInt("event.dragon-watchdog.maximum-stationary-seconds", 25));
+        if (!outside && dragonStationarySeconds < maximumStationary) return;
+        Location rescue = dragonRescueLocation();
+        dragon.teleport(rescue);
+        dragon.setVelocity(new Vector());
+        dragon.setPhase(EnderDragon.Phase.CIRCLING);
+        dragonStationarySeconds = 0;
+        lastDragonLocation = rescue.clone();
+        for (Player player : eventWorld.getPlayers()) messages.send(player, "dragon-watchdog-rescue");
+    }
+
+    private boolean dragonMayHoverAtPortal() {
+        String phase = dragon.getPhase().name();
+        return phase.equals("LAND_ON_PORTAL") || phase.equals("BREATH_ATTACK")
+                || phase.equals("SEARCH_FOR_BREATH_ATTACK_TARGET") || phase.equals("ROAR_BEFORE_ATTACK")
+                || phase.equals("DYING");
+    }
+
+    private Location dragonRescueLocation() {
+        DragonBattle battle = eventWorld.getEnderDragonBattle();
+        Location center = portalLocation(battle);
+        if (center == null) center = joinLocation();
+        double offset = plugin.getConfig().getDouble("event.dragon-watchdog.rescue-height-offset", 70.0);
+        double y = Math.max(eventWorld.getMinHeight() + 10.0,
+                Math.min(eventWorld.getMaxHeight() - 10.0, center.getY() + offset));
+        return new Location(eventWorld, center.getX() + 0.5, y, center.getZ() + 0.5, 0.0f, 0.0f);
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void onDeath(EntityDeathEvent event) {
         if (state == EventState.ACTIVE && event.getEntity() == dragon) {
+            Location finaleLocation = aprilCreeper != null && aprilCreeper.isValid()
+                    ? aprilCreeper.getLocation().clone() : dragon.getLocation().clone();
             cancelAprilVisual();
-            openExitPortal();
+            rebuildSafeExitPortal();
+            if (eventMode == EventMode.APRIL_FOOLS) startAprilFoolsFinale(finaleLocation);
             finish(true);
         }
     }
@@ -684,7 +981,9 @@ final class DragonEventManager implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onVictoryFireworkDamage(EntityDamageByEntityEvent event) {
         if (event.getDamager() instanceof Firework firework
-                && firework.getScoreboardTags().contains("townysmp_dragon_victory")) {
+                && firework.getScoreboardTags().contains("townysmp_dragon_victory")
+                || event.getDamager() instanceof Creeper creeper
+                && creeper.getScoreboardTags().contains("townysmp_april_finale")) {
             event.setCancelled(true);
         }
     }
@@ -725,7 +1024,7 @@ final class DragonEventManager implements Listener {
             Bukkit.getScheduler().runTask(plugin, () -> restoreGameMode(player));
             return;
         }
-        event.setRespawnLocation(joinLocation());
+        event.setRespawnLocation(safeJoinLocation());
         int protection = Math.max(0, plugin.getConfig().getInt("event.death.respawn-protection-seconds", 5));
         int slowFalling = Math.max(0, plugin.getConfig().getInt("event.death.slow-falling-seconds", 8));
         Bukkit.getScheduler().runTask(plugin, () -> {
@@ -771,7 +1070,7 @@ final class DragonEventManager implements Listener {
         long cooldown = plugin.getConfig().getLong("event.void-rescue.cooldown-seconds", 10) * 1000L;
         if (now - voidRescueCooldown.getOrDefault(player.getUniqueId(), 0L) < cooldown) return;
         voidRescueCooldown.put(player.getUniqueId(), now);
-        player.teleport(joinLocation());
+        player.teleport(safeJoinLocation());
         int slowFalling = plugin.getConfig().getInt("event.void-rescue.slow-falling-seconds", 8);
         if (slowFalling > 0) player.addPotionEffect(new PotionEffect(PotionEffectType.SLOW_FALLING, slowFalling * 20, 0, false, false, true));
         messages.send(player, "void-rescued");
@@ -833,7 +1132,7 @@ final class DragonEventManager implements Listener {
         cancelFightTasks();
         state = EventState.FINISHING;
         if (dragon != null && dragon.isValid()) dragon.setInvulnerable(true);
-        openExitPortal();
+        rebuildSafeExitPortal();
         int delay = Math.max(5, plugin.getConfig().getInt("event.finish-delay-seconds", 120));
         Map<String, String> values = new HashMap<>(replacements);
         values.put("time", formatTime(delay));
@@ -920,6 +1219,59 @@ final class DragonEventManager implements Listener {
         }
     }
 
+    private void startAprilFoolsFinale(Location center) {
+        if (eventWorld == null || !plugin.getConfig().getBoolean("april-fools.finale.enabled", true)) return;
+        eventWorld.playSound(center, "minecraft:entity.creeper.primed", 1.5f, 0.55f);
+        eventWorld.playSound(center, "minecraft:entity.generic.explode", 1.4f, 1.2f);
+        Color[] colors = {
+                Color.fromRGB(255, 43, 214), Color.fromRGB(56, 255, 101),
+                Color.fromRGB(255, 215, 0), Color.fromRGB(55, 220, 255)
+        };
+        for (Color color : colors) {
+            eventWorld.spawnParticle(Particle.DUST, center, 45, 2.5, 2.5, 2.5, 0.08,
+                    new Particle.DustOptions(color, 1.6f));
+        }
+        eventWorld.spawnParticle(Particle.FIREWORK, center, 80, 3.0, 3.0, 3.0, 0.25);
+        int minis = Math.max(0, Math.min(30,
+                plugin.getConfig().getInt("april-fools.finale.mini-creepers", 10)));
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        for (int index = 0; index < minis; index++) {
+            Location spawn = center.clone().add(random.nextDouble(-2.0, 2.0), random.nextDouble(0.5, 2.5),
+                    random.nextDouble(-2.0, 2.0));
+            Creeper mini = eventWorld.spawn(spawn, Creeper.class, creeper -> {
+                creeper.setAI(false);
+                creeper.setPowered(random.nextBoolean());
+                creeper.setExplosionRadius(0);
+                creeper.setMaxFuseTicks(Math.max(10,
+                        plugin.getConfig().getInt("april-fools.finale.mini-fuse-ticks", 40)));
+                creeper.addScoreboardTag("townysmp_april_finale");
+                AttributeInstance scale = creeper.getAttribute(Attribute.SCALE);
+                if (scale != null) scale.setBaseValue(Math.max(0.2, Math.min(1.0,
+                        plugin.getConfig().getDouble("april-fools.finale.mini-creeper-scale", 0.45))));
+            });
+            mini.setVelocity(new Vector(random.nextDouble(-0.7, 0.7), random.nextDouble(0.5, 1.1),
+                    random.nextDouble(-0.7, 0.7)));
+            mini.ignite();
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (mini.isValid()) mini.remove();
+            }, 100L);
+        }
+        int finaleFireworks = Math.max(0, Math.min(20,
+                plugin.getConfig().getInt("april-fools.finale.fireworks", 6)));
+        for (int index = 0; index < finaleFireworks; index++) {
+            Location launch = center.clone().add(random.nextDouble(-4.0, 4.0), random.nextDouble(0.0, 2.0),
+                    random.nextDouble(-4.0, 4.0));
+            Firework firework = eventWorld.spawn(launch, Firework.class);
+            FireworkMeta meta = firework.getFireworkMeta();
+            meta.addEffect(FireworkEffect.builder().with(FireworkEffect.Type.BURST)
+                    .withColor(colors[random.nextInt(colors.length)])
+                    .withFade(colors[random.nextInt(colors.length)]).trail(true).flicker(true).build());
+            meta.setPower(1);
+            firework.setFireworkMeta(meta);
+            firework.addScoreboardTag("townysmp_dragon_victory");
+        }
+    }
+
     void stop() {
         if (state == EventState.IDLE) return;
         Bukkit.broadcast(messages.get("stopped"));
@@ -945,16 +1297,23 @@ final class DragonEventManager implements Listener {
                     "player", name == null ? ranking.get(i).getKey().toString() : name,
                     "damage", formatDamage(ranking.get(i).getValue()))));
         }
+        broadcastMvpSummary(ranking);
         for (UUID uuid : participants) {
             int rank = ranking.stream().map(Map.Entry::getKey).toList().indexOf(uuid) + 1;
             if (damage.getOrDefault(uuid, 0.0) <= 0) rank = 0;
             double dealt = damage.getOrDefault(uuid, 0.0);
             String name = Bukkit.getOfflinePlayer(uuid).getName();
-            StatsManager.RecordResult result = stats.record(uuid, name == null ? uuid.toString() : name, dealt, rank, eventDeaths.getOrDefault(uuid, 0));
+            StatsManager.RecordResult result = stats.record(uuid, name == null ? uuid.toString() : name, dealt, rank,
+                    eventDeaths.getOrDefault(uuid, 0), crystalsDestroyed.getOrDefault(uuid, 0),
+                    explosionsTriggered.getOrDefault(uuid, 0));
             Player online = Bukkit.getPlayer(uuid);
             if (online != null) {
                 String resultKey = rank > 0 ? "personal-result" : "personal-result-unranked";
-                messages.send(online, resultKey, Map.of("rank", Integer.toString(rank), "damage", formatDamage(dealt)));
+                messages.send(online, resultKey, Map.of(
+                        "rank", Integer.toString(rank),
+                        "damage", formatDamage(dealt),
+                        "crystals", Integer.toString(crystalsDestroyed.getOrDefault(uuid, 0)),
+                        "explosions", Integer.toString(explosionsTriggered.getOrDefault(uuid, 0))));
                 if (result.personalBest()) messages.send(online, "personal-best", Map.of("damage", formatDamage(dealt)));
             }
             boolean rewardEligible = !spectators.contains(uuid) && !departedParticipants.contains(uuid);
@@ -980,6 +1339,46 @@ final class DragonEventManager implements Listener {
         }
         runEventEndCommands(players);
         stats.save();
+    }
+
+    private void broadcastMvpSummary(List<Map.Entry<UUID, Double>> ranking) {
+        List<UUID> fighters = participants.stream()
+                .filter(uuid -> damage.getOrDefault(uuid, 0.0) > 0.0)
+                .filter(uuid -> !departedParticipants.contains(uuid))
+                .filter(uuid -> !spectators.contains(uuid))
+                .toList();
+        if (fighters.isEmpty()) return;
+        Bukkit.broadcast(messages.get("mvp-header"));
+        if (!ranking.isEmpty()) {
+            Bukkit.broadcast(messages.get("mvp-damage", Map.of(
+                    "players", displayNames(List.of(ranking.get(0).getKey())),
+                    "damage", formatDamage(ranking.get(0).getValue()))));
+        }
+        int fewestDeaths = fighters.stream().mapToInt(uuid -> eventDeaths.getOrDefault(uuid, 0)).min().orElse(0);
+        List<UUID> survivors = fighters.stream()
+                .filter(uuid -> eventDeaths.getOrDefault(uuid, 0) == fewestDeaths).toList();
+        Bukkit.broadcast(messages.get("mvp-survivor", Map.of(
+                "players", displayNames(survivors), "deaths", Integer.toString(fewestDeaths))));
+        int mostCrystals = fighters.stream().mapToInt(uuid -> crystalsDestroyed.getOrDefault(uuid, 0)).max().orElse(0);
+        if (mostCrystals > 0) {
+            List<UUID> crystalMvp = fighters.stream()
+                    .filter(uuid -> crystalsDestroyed.getOrDefault(uuid, 0) == mostCrystals).toList();
+            Bukkit.broadcast(messages.get("mvp-crystals", Map.of(
+                    "players", displayNames(crystalMvp), "crystals", Integer.toString(mostCrystals))));
+        }
+        int mostExplosions = fighters.stream().mapToInt(uuid -> explosionsTriggered.getOrDefault(uuid, 0)).max().orElse(0);
+        if (mostExplosions > 0) {
+            List<UUID> explosionMvp = fighters.stream()
+                    .filter(uuid -> explosionsTriggered.getOrDefault(uuid, 0) == mostExplosions).toList();
+            Bukkit.broadcast(messages.get("mvp-explosions", Map.of(
+                    "players", displayNames(explosionMvp), "explosions", Integer.toString(mostExplosions))));
+        }
+    }
+
+    private String displayNames(List<UUID> uuids) {
+        return uuids.stream().map(Bukkit::getOfflinePlayer)
+                .map(player -> player.getName() == null ? player.getUniqueId().toString() : player.getName())
+                .sorted(String.CASE_INSENSITIVE_ORDER).reduce((left, right) -> left + ", " + right).orElse("-");
     }
 
     private void runDamageTierCommands(UUID uuid, int rank, double dealt, String players) {
@@ -1021,6 +1420,8 @@ final class DragonEventManager implements Listener {
                 .replace("{uuid}", uuid.toString())
                 .replace("{rank}", Integer.toString(rank))
                 .replace("{damage}", String.format(Locale.US, "%.2f", dealt))
+                .replace("{crystals}", Integer.toString(crystalsDestroyed.getOrDefault(uuid, 0)))
+                .replace("{explosions}", Integer.toString(explosionsTriggered.getOrDefault(uuid, 0)))
                 .replace("{players}", players)
                 .replace("{player_count}", Integer.toString(participants.size()));
     }
@@ -1062,6 +1463,13 @@ final class DragonEventManager implements Listener {
         exitPortalBlocks.clear();
         damage.clear();
         eventDeaths.clear();
+        crystalsDestroyed.clear();
+        explosionsTriggered.clear();
+        explosiveOwners.clear();
+        pendingBlockExplosions.clear();
+        countedCrystals.clear();
+        primedTnt.clear();
+        aprilProjectiles.clear();
         originalGameModes.clear();
         originalAllowFlight.clear();
         originalFlying.clear();
@@ -1070,6 +1478,12 @@ final class DragonEventManager implements Listener {
         eventMode = EventMode.NORMAL;
         fightSecondsLeft = 0;
         closingSecondsLeft = 0;
+        effectiveDragonHealth = 0.0;
+        incomingDamageMultiplier = 1.0;
+        dragonAttackMultiplier = 1.0;
+        lastDragonLocation = null;
+        dragonStationarySeconds = 0;
+        spawningScaledProjectile = false;
         state = EventState.IDLE;
     }
 
@@ -1284,6 +1698,32 @@ final class DragonEventManager implements Listener {
                 (float) plugin.getConfig().getDouble("world.join-location.pitch", 0));
     }
 
+    private Location safeJoinLocation() {
+        Location target = joinLocation();
+        if (!plugin.getConfig().getBoolean("event.safe-respawn.enabled", true) || eventWorld == null) return target;
+        Block floor = target.clone().add(0.0, -1.0, 0.0).getBlock();
+        if (floor.getType().isSolid()) return target;
+        int radius = Math.max(1, Math.min(6,
+                plugin.getConfig().getInt("event.safe-respawn.platform-radius", 2)));
+        Material material;
+        try {
+            material = Material.valueOf(plugin.getConfig()
+                    .getString("event.safe-respawn.platform-material", "OBSIDIAN").toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            material = Material.OBSIDIAN;
+        }
+        int floorY = target.getBlockY() - 1;
+        for (int x = -radius; x <= radius; x++) {
+            for (int z = -radius; z <= radius; z++) {
+                eventWorld.getBlockAt(target.getBlockX() + x, floorY, target.getBlockZ() + z)
+                        .setType(material, false);
+            }
+        }
+        eventWorld.getBlockAt(target.getBlockX(), target.getBlockY(), target.getBlockZ()).setType(Material.AIR, false);
+        eventWorld.getBlockAt(target.getBlockX(), target.getBlockY() + 1, target.getBlockZ()).setType(Material.AIR, false);
+        return target;
+    }
+
     private Location spectatorLocation() {
         return new Location(eventWorld,
                 plugin.getConfig().getDouble("world.spectator-location.x", 0.5),
@@ -1382,13 +1822,66 @@ final class DragonEventManager implements Listener {
         }
     }
 
+    private void rebuildSafeExitPortal() {
+        if (eventWorld == null) return;
+        DragonBattle battle = eventWorld.getEnderDragonBattle();
+        Location center = portalLocation(battle);
+        if (battle != null && center != null
+                && plugin.getConfig().getBoolean("event.safe-exit.rebuild-vanilla-portal", true)) {
+            try {
+                if (plugin.getConfig().getBoolean("world.portal-location.set", false)) {
+                    forceBattlePortalLocation(battle, center);
+                }
+                battle.generateEndPortal(true);
+            } catch (RuntimeException exception) {
+                plugin.getLogger().log(Level.WARNING, "Could not regenerate the safe Dragon exit fountain", exception);
+            }
+        }
+        openExitPortal();
+        if (center == null || !plugin.getConfig().getBoolean("event.safe-exit.platform.enabled", true)) return;
+        int radius = Math.max(2, Math.min(12,
+                plugin.getConfig().getInt("event.safe-exit.platform.radius", 4)));
+        int floorY = center.getBlockY() - 1;
+        for (int x = -radius; x <= radius; x++) {
+            for (int z = -radius; z <= radius; z++) {
+                Block floor = eventWorld.getBlockAt(center.getBlockX() + x, floorY, center.getBlockZ() + z);
+                if (!floor.getType().isSolid()) floor.setType(Material.BEDROCK, false);
+            }
+        }
+    }
+
     private Player resolvePlayer(Entity entity) {
+        return resolvePlayer(entity, new HashSet<>());
+    }
+
+    private Player resolvePlayer(Entity entity, Set<UUID> visited) {
+        if (entity == null || !visited.add(entity.getUniqueId())) return null;
         if (entity instanceof Player player) return player;
+        UUID trackedOwner = explosiveOwners.get(entity.getUniqueId());
+        if (trackedOwner != null) {
+            Player player = Bukkit.getPlayer(trackedOwner);
+            if (player != null) return player;
+        }
+        if (entity instanceof TNTPrimed tnt && tnt.getSource() != null) {
+            Player player = resolvePlayer(tnt.getSource(), visited);
+            if (player != null) return player;
+        }
         if (entity instanceof Projectile projectile) {
             ProjectileSource shooter = projectile.getShooter();
             if (shooter instanceof Player player) return player;
+            if (shooter instanceof Entity shooterEntity) return resolvePlayer(shooterEntity, visited);
         }
         return null;
+    }
+
+    private boolean isBossDamage(Entity damager) {
+        if (damager == dragon || damager == aprilCreeper) return true;
+        if (damager.getScoreboardTags().contains("townysmp_april_projectile")
+                || damager.getScoreboardTags().contains("townysmp_scaled_dragon_projectile")) return true;
+        if (damager instanceof Projectile projectile) {
+            return projectile.getShooter() == dragon || projectile.getShooter() == aprilCreeper;
+        }
+        return false;
     }
 
     private void cancelTicker() {
