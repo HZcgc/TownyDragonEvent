@@ -16,7 +16,7 @@ public final class TownyDragonEventPlugin extends JavaPlugin {
         messages = new Messages(this);
         statsManager = new StatsManager(this);
         eventManager = new DragonEventManager(this, messages, statsManager);
-        DragonCommand command = new DragonCommand(this, eventManager, messages);
+        DragonCommand command = new DragonCommand(this, eventManager, messages, statsManager);
         PluginCommand dragon = Objects.requireNonNull(getCommand("dragon"));
         dragon.setExecutor(command);
         dragon.setTabCompleter(command);

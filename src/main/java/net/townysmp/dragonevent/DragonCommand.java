@@ -1,5 +1,7 @@
 package net.townysmp.dragonevent;
 
+import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -17,11 +19,13 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
     private final TownyDragonEventPlugin plugin;
     private final DragonEventManager manager;
     private final Messages messages;
+    private final StatsManager stats;
 
-    DragonCommand(TownyDragonEventPlugin plugin, DragonEventManager manager, Messages messages) {
+    DragonCommand(TownyDragonEventPlugin plugin, DragonEventManager manager, Messages messages, StatsManager stats) {
         this.plugin = plugin;
         this.manager = manager;
         this.messages = messages;
+        this.stats = stats;
     }
 
     @Override
@@ -41,6 +45,7 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
                 if (sender instanceof Player player) manager.leave(player);
             }
             case "status" -> status(sender);
+            case "stats" -> showStats(sender, args);
             case "start" -> {
                 if (!admin(sender)) return true;
                 Integer seconds = null;
@@ -62,10 +67,51 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
                 plugin.reloadPlugin();
                 sender.sendMessage("TownyDragonEvent reloaded.");
             }
-            default -> sender.sendMessage("/dragon <join|leave|status|start|stop|reload>");
+            case "season" -> {
+                if (!admin(sender)) return true;
+                if (args.length < 2 || !args[1].matches("[A-Za-z0-9_-]{1,32}")) {
+                    sender.sendMessage("Usage: /dragon season <name>");
+                    return true;
+                }
+                stats.setSeason(args[1]);
+                messages.send(sender, "season-changed", Map.of("season", args[1]));
+            }
+            default -> sender.sendMessage("/dragon <join|leave|status|stats|start|stop|reload|season>");
         }
         return true;
     }
+
+    private void showStats(CommandSender sender, String[] args) {
+        OfflinePlayer target;
+        if (args.length > 1) {
+            if (!sender.hasPermission("townysmp.dragon.admin")) {
+                sender.sendMessage("No permission to view other players.");
+                return;
+            }
+            target = Bukkit.getOfflinePlayer(args[1]);
+        } else if (sender instanceof Player player) {
+            target = player;
+        } else {
+            sender.sendMessage("Usage: /dragon stats <player>");
+            return;
+        }
+        String name = target.getName() == null ? target.getUniqueId().toString() : target.getName();
+        String bestRank = stats.bestRank(target.getUniqueId()) == 0 ? "-" : Integer.toString(stats.bestRank(target.getUniqueId()));
+        messages.send(sender, "stats-header", Map.of("player", name));
+        messages.send(sender, "stats-lifetime", Map.of(
+                "damage", format(stats.totalDamage(target.getUniqueId())),
+                "participations", Integer.toString(stats.participations(target.getUniqueId())),
+                "wins", Integer.toString(stats.wins(target.getUniqueId()))));
+        messages.send(sender, "stats-season", Map.of(
+                "season", stats.season(),
+                "season_damage", format(stats.seasonDamage(target.getUniqueId())),
+                "season_participations", Integer.toString(stats.seasonParticipations(target.getUniqueId())),
+                "season_wins", Integer.toString(stats.seasonWins(target.getUniqueId()))));
+        messages.send(sender, "stats-best", Map.of(
+                "personal_best", format(stats.personalBest(target.getUniqueId())), "best_rank", bestRank));
+    }
+
+    private String format(double value) { return String.format(Locale.US, "%.2f", value); }
 
     private boolean admin(CommandSender sender) {
         if (sender.hasPermission("townysmp.dragon.admin")) return true;
@@ -83,8 +129,8 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                  @NotNull String alias, @NotNull String[] args) {
         if (args.length != 1) return List.of();
-        List<String> choices = new ArrayList<>(List.of("join", "leave", "status"));
-        if (sender.hasPermission("townysmp.dragon.admin")) choices.addAll(List.of("start", "stop", "reload"));
+        List<String> choices = new ArrayList<>(List.of("join", "leave", "status", "stats"));
+        if (sender.hasPermission("townysmp.dragon.admin")) choices.addAll(List.of("start", "stop", "reload", "season"));
         String prefix = args[0].toLowerCase(Locale.ROOT);
         return choices.stream().filter(value -> value.startsWith(prefix)).toList();
     }

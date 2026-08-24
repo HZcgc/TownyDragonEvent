@@ -10,6 +10,7 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.boss.DragonBattle;
 import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Entity;
@@ -51,6 +52,7 @@ final class DragonEventManager implements Listener {
     private final Messages messages;
     private final StatsManager stats;
     private final Set<UUID> participants = new HashSet<>();
+    private final Set<UUID> lateParticipants = new HashSet<>();
     private final Map<UUID, Location> returnLocations = new HashMap<>();
     private final Map<UUID, Double> damage = new HashMap<>();
     private final Map<String, UUID> joinedIps = new HashMap<>();
@@ -208,6 +210,9 @@ final class DragonEventManager implements Listener {
             return false;
         }
         participants.add(player.getUniqueId());
+        if (state == EventState.RESPAWNING || state == EventState.ACTIVE) {
+            lateParticipants.add(player.getUniqueId());
+        }
         if (ip != null) joinedIps.put(ip, player.getUniqueId());
         damage.put(player.getUniqueId(), 0.0);
         if (state == EventState.SCHEDULED) {
@@ -346,19 +351,62 @@ final class DragonEventManager implements Listener {
                 .sorted(Map.Entry.<UUID, Double>comparingByValue(Comparator.reverseOrder()))
                 .toList();
         String players = participantNames();
+        double minimum = plugin.getConfig().getDouble("event.minimum-reward-damage", 25.0);
+        Bukkit.broadcast(messages.get("top-header"));
+        for (int i = 0; i < Math.min(3, ranking.size()); i++) {
+            String name = Bukkit.getOfflinePlayer(ranking.get(i).getKey()).getName();
+            Bukkit.broadcast(messages.get("top-entry", Map.of(
+                    "rank", Integer.toString(i + 1),
+                    "player", name == null ? ranking.get(i).getKey().toString() : name,
+                    "damage", formatDamage(ranking.get(i).getValue()))));
+        }
         for (UUID uuid : participants) {
             int rank = ranking.stream().map(Map.Entry::getKey).toList().indexOf(uuid) + 1;
             if (damage.getOrDefault(uuid, 0.0) <= 0) rank = 0;
             double dealt = damage.getOrDefault(uuid, 0.0);
-            stats.record(uuid, dealt, rank);
-            runRewardCommands("rewards.participation", uuid, rank, dealt, players);
+            String name = Bukkit.getOfflinePlayer(uuid).getName();
+            StatsManager.RecordResult result = stats.record(uuid, name == null ? uuid.toString() : name, dealt, rank);
+            Player online = Bukkit.getPlayer(uuid);
+            if (online != null) {
+                String resultKey = rank > 0 ? "personal-result" : "personal-result-unranked";
+                messages.send(online, resultKey, Map.of("rank", Integer.toString(rank), "damage", formatDamage(dealt)));
+                if (result.personalBest()) messages.send(online, "personal-best", Map.of("damage", formatDamage(dealt)));
+            }
+            if (dealt >= minimum) {
+                String participationPath = lateParticipants.contains(uuid) ? "rewards.late-participation" : "rewards.participation";
+                runRewardCommands(participationPath, uuid, rank, dealt, players);
+                runDamageTierCommands(uuid, rank, dealt, players);
+            } else if (online != null) {
+                messages.send(online, "reward-ineligible", Map.of("minimum", formatDamage(minimum)));
+            }
+            if (!ranking.isEmpty() && ranking.get(0).getKey().equals(uuid) && result.serverRecord()) {
+                Bukkit.broadcast(messages.get("server-record", Map.of("player", name == null ? uuid.toString() : name, "damage", formatDamage(dealt))));
+            }
         }
         for (int i = 0; i < Math.min(3, ranking.size()); i++) {
-            runRewardCommands("rewards.rank-" + (i + 1), ranking.get(i).getKey(), i + 1, ranking.get(i).getValue(), players);
+            if (ranking.get(i).getValue() >= minimum) {
+                runRewardCommands("rewards.rank-" + (i + 1), ranking.get(i).getKey(), i + 1, ranking.get(i).getValue(), players);
+            }
         }
         runEventEndCommands(players);
         stats.save();
     }
+
+    private void runDamageTierCommands(UUID uuid, int rank, double dealt, String players) {
+        ConfigurationSection tiers = plugin.getConfig().getConfigurationSection("rewards.damage-tiers");
+        if (tiers == null) return;
+        tiers.getKeys(false).stream().map(key -> {
+            try { return Double.parseDouble(key); }
+            catch (NumberFormatException ignored) { return null; }
+        }).filter(java.util.Objects::nonNull).sorted().filter(required -> dealt >= required).forEach(required ->
+                runRewardCommands("rewards.damage-tiers." + formatTierKey(required), uuid, rank, dealt, players));
+    }
+
+    private String formatTierKey(double value) {
+        return value == Math.rint(value) ? Long.toString((long) value) : Double.toString(value);
+    }
+
+    private String formatDamage(double value) { return String.format(Locale.US, "%.2f", value); }
 
     private void runRewardCommands(String path, UUID uuid, int rank, double dealt, String players) {
         Player player = Bukkit.getPlayer(uuid);
@@ -417,6 +465,7 @@ final class DragonEventManager implements Listener {
     private void clearSession() {
         cancelEventTasks();
         participants.clear();
+        lateParticipants.clear();
         returnLocations.clear();
         joinedIps.clear();
         damage.clear();

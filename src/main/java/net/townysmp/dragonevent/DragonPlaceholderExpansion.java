@@ -31,6 +31,9 @@ final class DragonPlaceholderExpansion extends PlaceholderExpansion {
         if (key.equals("time_remaining")) return event.timeRemaining();
         if (key.equals("seconds_remaining")) return Integer.toString(event.secondsRemaining());
         if (key.equals("registered_count")) return Integer.toString(event.playerCount());
+        if (key.equals("season")) return stats.season();
+        if (key.equals("server_record_damage")) return format(stats.serverRecordDamage());
+        if (key.equals("server_record_player")) return stats.serverRecordPlayer();
         if (player == null) return "";
         UUID uuid = player.getUniqueId();
         return switch (key) {
@@ -42,6 +45,12 @@ final class DragonPlaceholderExpansion extends PlaceholderExpansion {
             case "participations" -> Integer.toString(stats.participations(uuid));
             case "wins" -> Integer.toString(stats.wins(uuid));
             case "best_rank" -> Integer.toString(stats.bestRank(uuid));
+            case "personal_best" -> format(stats.personalBest(uuid));
+            case "season_damage" -> format(stats.seasonDamage(uuid));
+            case "season_participations" -> Integer.toString(stats.seasonParticipations(uuid));
+            case "season_wins" -> Integer.toString(stats.seasonWins(uuid));
+            case "season_best_rank" -> Integer.toString(stats.seasonBestRank(uuid));
+            case "season_personal_best" -> format(stats.seasonPersonalBest(uuid));
             default -> null;
         };
     }

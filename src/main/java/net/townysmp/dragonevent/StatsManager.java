@@ -8,6 +8,8 @@ import java.util.UUID;
 import java.util.logging.Level;
 
 final class StatsManager {
+    record RecordResult(boolean personalBest, boolean serverRecord) {}
+
     private final TownyDragonEventPlugin plugin;
     private final File target;
     private final YamlConfiguration data;
@@ -18,13 +20,30 @@ final class StatsManager {
         this.data = YamlConfiguration.loadConfiguration(target);
     }
 
-    synchronized void record(UUID uuid, double damage, int rank) {
-        String root = "players." + uuid + ".";
-        data.set(root + "participations", participations(uuid) + 1);
-        data.set(root + "total-damage", totalDamage(uuid) + damage);
+    synchronized RecordResult record(UUID uuid, String name, double damage, int rank) {
+        double oldPersonalBest = personalBest(uuid);
+        double oldServerRecord = serverRecordDamage();
+        updatePlayer("players." + uuid + ".", uuid, damage, rank, false);
+        updatePlayer(seasonRoot(uuid), uuid, damage, rank, true);
+        if (damage > oldPersonalBest) data.set(path(uuid, "personal-best"), damage);
+        if (damage > oldServerRecord) {
+            data.set("records.server-best.damage", damage);
+            data.set("records.server-best.player", name);
+            data.set("records.server-best.uuid", uuid.toString());
+        }
+        return new RecordResult(damage > oldPersonalBest, damage > oldServerRecord);
+    }
+
+    private void updatePlayer(String root, UUID uuid, double damage, int rank, boolean seasonal) {
+        int participations = data.getInt(root + "participations");
+        int wins = data.getInt(root + "wins");
+        int best = data.getInt(root + "best-rank");
+        double total = data.getDouble(root + "total-damage");
+        data.set(root + "participations", participations + 1);
+        data.set(root + "total-damage", total + damage);
         data.set(root + "last-damage", damage);
-        if (rank == 1) data.set(root + "wins", wins(uuid) + 1);
-        int best = bestRank(uuid);
+        data.set(root + "personal-best", Math.max(data.getDouble(root + "personal-best"), damage));
+        if (rank == 1) data.set(root + "wins", wins + 1);
         if (rank > 0 && (best == 0 || rank < best)) data.set(root + "best-rank", rank);
     }
 
@@ -33,6 +52,22 @@ final class StatsManager {
     int bestRank(UUID uuid) { return data.getInt(path(uuid, "best-rank")); }
     double totalDamage(UUID uuid) { return data.getDouble(path(uuid, "total-damage")); }
     double lastDamage(UUID uuid) { return data.getDouble(path(uuid, "last-damage")); }
+    double personalBest(UUID uuid) { return data.getDouble(path(uuid, "personal-best")); }
+
+    int seasonParticipations(UUID uuid) { return data.getInt(seasonRoot(uuid) + "participations"); }
+    int seasonWins(UUID uuid) { return data.getInt(seasonRoot(uuid) + "wins"); }
+    int seasonBestRank(UUID uuid) { return data.getInt(seasonRoot(uuid) + "best-rank"); }
+    double seasonDamage(UUID uuid) { return data.getDouble(seasonRoot(uuid) + "total-damage"); }
+    double seasonPersonalBest(UUID uuid) { return data.getDouble(seasonRoot(uuid) + "personal-best"); }
+
+    double serverRecordDamage() { return data.getDouble("records.server-best.damage"); }
+    String serverRecordPlayer() { return data.getString("records.server-best.player", "-"); }
+    String season() { return plugin.getConfig().getString("statistics.season", "season-1"); }
+
+    void setSeason(String season) {
+        plugin.getConfig().set("statistics.season", season);
+        plugin.saveConfig();
+    }
 
     synchronized void save() {
         try { data.save(target); }
@@ -40,4 +75,8 @@ final class StatsManager {
     }
 
     private String path(UUID uuid, String key) { return "players." + uuid + "." + key; }
+    private String seasonRoot(UUID uuid) {
+        String safe = season().replaceAll("[^A-Za-z0-9_-]", "_");
+        return "seasons." + safe + ".players." + uuid + ".";
+    }
 }

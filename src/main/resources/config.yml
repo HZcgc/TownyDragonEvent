@@ -16,6 +16,8 @@ event:
   minimum-players: 1
   one-account-per-ip: true
   block-building: true
+  # Players below this damage receive no participation or damage-tier rewards.
+  minimum-reward-damage: 25.0
   # Calm registration reminders. Players can use /dragon join from the first
   # announcement onward; they are teleported when the 5-minute lobby opens.
   announcement-seconds:
@@ -80,6 +82,9 @@ rewards:
   # Per-player variables: {player}, {uuid}, {damage}, {rank}, {players}, {player_count}
   participation:
     - eco give {player} 500
+  # Used instead of participation when joining after crystal summoning began.
+  late-participation:
+    - eco give {player} 250
   rank-1:
     - eco give {player} 5000
   rank-2:
@@ -88,3 +93,14 @@ rewards:
     - eco give {player} 2000
   # Executed once after the ranking. Useful for broadcasts and integrations.
   event-end: []
+  # Every reached tier is executed. Keys are required Dragon damage.
+  damage-tiers:
+    '100':
+      - eco give {player} 250
+    '250':
+      - eco give {player} 500
+    '500':
+      - eco give {player} 1000
+statistics:
+  # Change with /dragon season <name>. Old seasons remain in stats.yml.
+  season: season-1
