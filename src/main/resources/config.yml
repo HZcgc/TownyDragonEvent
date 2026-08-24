@@ -1,20 +1,20 @@
 world:
   # Both folders are relative to the server world-container.
-  # Enter the exact name/folder of the loaded custom End arena here. This is
-  # the untouched master world that you edit and configure in-game. At every
-  # event it is saved, unloaded briefly and cloned to runtime-name. Leave this
-  # empty to use vanilla-end-folder as the master instead.
+  # Optional manual override. Leave this empty and the plugin automatically
+  # uses a loaded world or world folder named by auto-template-name. If that
+  # world does not exist, vanilla-end-folder is used instead.
   template-folder: ''
+  auto-template-name: dragonevent_template
   vanilla-end-folder: world_the_end
   runtime-name: dragonevent_end
   # Load the custom template world, stand where participants should arrive,
   # and run /dragon setspawn. Only the coordinates are stored, so the same
   # point is used inside every disposable runtime copy.
   join-location: { x: 0.5, y: 65.0, z: 18.5, yaw: 180.0, pitch: 0.0 }
-  # Stand on/next to the center fountain and run /dragon setportal. The command
-  # detects nearby active portal blocks; without them it uses the block below
-  # your feet. Vanilla Dragon AI and tower regeneration require the arena and
-  # fountain to remain close to X/Z 0.
+  # Stand on the center fountain pillar and run /dragon setportal. The command
+  # detects nearby active portal blocks or the four-block Vanilla pillar and
+  # stores the portal plane. Vanilla Dragon AI and tower regeneration require
+  # the arena and fountain to remain close to X/Z 0.
   portal-location:
     set: false
     x: 0

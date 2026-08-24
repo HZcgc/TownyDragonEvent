@@ -42,6 +42,7 @@ import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -143,13 +144,27 @@ final class DragonEventManager implements Listener {
     }
 
     private boolean isTemplateWorld(Player player) {
-        String configuredTemplate = plugin.getConfig().getString("world.template-folder", "").trim();
-        String templateWorld = configuredTemplate.isEmpty()
-                ? plugin.getConfig().getString("world.vanilla-end-folder", "world_the_end").trim()
-                : configuredTemplate;
+        String templateWorld = resolveTemplateWorldName();
         if (player.getWorld().getName().equals(templateWorld)) return true;
         messages.send(player, "template-world-required", Map.of("world", templateWorld));
         return false;
+    }
+
+    private String resolveTemplateWorldName() {
+        String configuredTemplate = plugin.getConfig().getString("world.template-folder", "").trim();
+        if (!configuredTemplate.isEmpty()) return configuredTemplate;
+
+        String automaticName = plugin.getConfig().getString("world.auto-template-name", "dragonevent_template").trim();
+        if (!automaticName.isEmpty()) {
+            Path automaticFolder = Bukkit.getWorldContainer().toPath().resolve(automaticName).normalize();
+            if (Bukkit.getWorld(automaticName) != null || Files.isDirectory(automaticFolder)) return automaticName;
+        }
+        return plugin.getConfig().getString("world.vanilla-end-folder", "world_the_end").trim();
+    }
+
+    private boolean usesVanillaTemplate() {
+        return resolveTemplateWorldName().equals(
+                plugin.getConfig().getString("world.vanilla-end-folder", "world_the_end").trim());
     }
     int currentRank(UUID uuid) {
         if (spectators.contains(uuid) || departedParticipants.contains(uuid)
@@ -174,17 +189,26 @@ final class DragonEventManager implements Listener {
 
         Path container = Bukkit.getWorldContainer().toPath();
         String configuredTemplate = plugin.getConfig().getString("world.template-folder", "").trim();
-        String sourceFolder = configuredTemplate.isEmpty()
-                ? plugin.getConfig().getString("world.vanilla-end-folder", "world_the_end").trim()
-                : configuredTemplate;
-        Path template = container.resolve(sourceFolder).normalize();
+        String sourceFolder = resolveTemplateWorldName();
+        World loadedSource = Bukkit.getWorld(sourceFolder);
+        Path template = loadedSource == null
+                ? container.resolve(sourceFolder).normalize()
+                : loadedSource.getWorldFolder().toPath().normalize();
         Path runtime = container.resolve(runtimeWorldName());
         if (sourceFolder.isEmpty() || template.equals(runtime.normalize())) {
             plugin.getLogger().severe("The event source world must be set and must differ from the runtime world.");
             state = EventState.IDLE;
             return false;
         }
-        World loadedSource = Bukkit.getWorld(sourceFolder);
+        if (loadedSource != null && loadedSource.getEnvironment() != World.Environment.THE_END) {
+            plugin.getLogger().severe("The Dragon template world " + sourceFolder + " is not an End world.");
+            state = EventState.IDLE;
+            return false;
+        }
+        if (configuredTemplate.isEmpty()
+                && sourceFolder.equals(plugin.getConfig().getString("world.auto-template-name", "dragonevent_template").trim())) {
+            plugin.getLogger().info("Using automatically detected Dragon template world: " + sourceFolder);
+        }
         boolean reloadSource = loadedSource != null;
         if (loadedSource != null) {
             if (!loadedSource.getPlayers().isEmpty()) {
@@ -859,7 +883,7 @@ final class DragonEventManager implements Listener {
         }
         if (state != EventState.PREPARING
                 || !plugin.getConfig().getBoolean("world.protect-vanilla-portal-during-copy", true)
-                || !plugin.getConfig().getString("world.template-folder", "").trim().isEmpty()) return;
+                || !usesVanillaTemplate()) return;
         Location target = event.getTo();
         if (target == null || target.getWorld() == null
                 || target.getWorld().getEnvironment() != World.Environment.THE_END) return;
@@ -943,7 +967,13 @@ final class DragonEventManager implements Listener {
         if (count > 0) {
             return new Location(world, Math.round((double) totalX / count), portalY, Math.round((double) totalZ / count));
         }
-        return origin.getBlock().getRelative(0, -1, 0).getLocation();
+        Block pillarTop = origin.getBlock().getRelative(0, -1, 0);
+        boolean vanillaPillar = pillarTop.getType() == Material.BEDROCK;
+        for (int depth = 1; depth <= 3 && vanillaPillar; depth++) {
+            vanillaPillar = pillarTop.getRelative(0, -depth, 0).getType() == Material.BEDROCK;
+        }
+        if (vanillaPillar) return pillarTop.getRelative(0, -3, 0).getLocation();
+        return pillarTop.getLocation();
     }
 
     private Map<String, String> locationReplacements(Location location) {
