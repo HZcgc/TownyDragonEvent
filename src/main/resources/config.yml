@@ -1,6 +1,9 @@
 world:
   # Both folders are relative to the server world-container.
-  template-folder: dragonevent_template
+  # Set a custom template folder here. Leave it empty to clone the server's
+  # vanilla End instead. The source world itself is never modified.
+  template-folder: ''
+  vanilla-end-folder: world_the_end
   runtime-name: dragonevent_end
   join-location: { x: 0.5, y: 65.0, z: 18.5, yaw: 180.0, pitch: 0.0 }
   fallback-command: spawn {player}

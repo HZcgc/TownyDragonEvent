@@ -77,8 +77,17 @@ final class DragonEventManager implements Listener {
         Bukkit.broadcast(messages.get("preparing"));
 
         Path container = Bukkit.getWorldContainer().toPath();
-        Path template = container.resolve(plugin.getConfig().getString("world.template-folder", "dragonevent_template"));
+        String configuredTemplate = plugin.getConfig().getString("world.template-folder", "").trim();
+        String sourceFolder = configuredTemplate.isEmpty()
+                ? plugin.getConfig().getString("world.vanilla-end-folder", "world_the_end").trim()
+                : configuredTemplate;
+        Path template = container.resolve(sourceFolder).normalize();
         Path runtime = container.resolve(runtimeWorldName());
+        if (sourceFolder.isEmpty() || template.equals(runtime.normalize())) {
+            plugin.getLogger().severe("The event source world must be set and must differ from the runtime world.");
+            state = EventState.IDLE;
+            return false;
+        }
         CompletableFuture.runAsync(() -> {
             try {
                 WorldFiles.copy(template, runtime);
