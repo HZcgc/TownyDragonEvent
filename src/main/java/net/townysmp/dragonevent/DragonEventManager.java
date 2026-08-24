@@ -25,8 +25,12 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerPortalEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -57,6 +61,7 @@ final class DragonEventManager implements Listener {
     private final Set<UUID> lateParticipants = new HashSet<>();
     private final Map<UUID, Location> returnLocations = new HashMap<>();
     private final Map<UUID, Double> damage = new HashMap<>();
+    private final Map<UUID, Integer> eventDeaths = new HashMap<>();
     private final Map<String, UUID> joinedIps = new HashMap<>();
     private final List<Location> exitPortalBlocks = new ArrayList<>();
     private EventState state = EventState.IDLE;
@@ -79,6 +84,7 @@ final class DragonEventManager implements Listener {
     String timeRemaining() { return formatTime(secondsRemaining()); }
     boolean isRegistered(UUID uuid) { return participants.contains(uuid); }
     double currentDamage(UUID uuid) { return damage.getOrDefault(uuid, 0.0); }
+    int currentDeaths(UUID uuid) { return eventDeaths.getOrDefault(uuid, 0); }
     int currentRank(UUID uuid) {
         if (!damage.containsKey(uuid) || damage.getOrDefault(uuid, 0.0) <= 0) return 0;
         List<UUID> ranking = damage.entrySet().stream().filter(entry -> entry.getValue() > 0)
@@ -157,6 +163,9 @@ final class DragonEventManager implements Listener {
         }
         eventWorld.setAutoSave(false);
         eventWorld.setGameRule(GameRule.DO_MOB_SPAWNING, false);
+        eventWorld.setGameRule(GameRule.KEEP_INVENTORY, plugin.getConfig().getBoolean("event.death.keep-inventory", true));
+        eventWorld.setGameRule(GameRule.DO_IMMEDIATE_RESPAWN, plugin.getConfig().getBoolean("event.death.immediate-respawn", true));
+        eventWorld.setGameRule(GameRule.SHOW_DEATH_MESSAGES, true);
         removeEventEntities();
         closeExitPortal();
         int joinSeconds = plugin.getConfig().getInt("event.join-seconds", 300);
@@ -220,6 +229,7 @@ final class DragonEventManager implements Listener {
         }
         if (ip != null) joinedIps.put(ip, player.getUniqueId());
         damage.put(player.getUniqueId(), 0.0);
+        eventDeaths.put(player.getUniqueId(), 0);
         if (state == EventState.SCHEDULED) {
             messages.send(player, "registered");
         } else {
@@ -335,6 +345,35 @@ final class DragonEventManager implements Listener {
                 && event.getEntity().getItemStack().getType() == Material.DRAGON_EGG) event.setCancelled(true);
     }
 
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        Player player = event.getEntity();
+        if (eventWorld == null || !player.getWorld().equals(eventWorld)
+                || !participants.contains(player.getUniqueId())) return;
+        if (plugin.getConfig().getBoolean("event.death.keep-inventory", true)) {
+            event.setKeepInventory(true);
+            event.getDrops().clear();
+            event.setKeepLevel(true);
+            event.setDroppedExp(0);
+        }
+        eventDeaths.merge(player.getUniqueId(), 1, Integer::sum);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onPlayerRespawn(PlayerRespawnEvent event) {
+        Player player = event.getPlayer();
+        if (eventWorld == null || !participants.contains(player.getUniqueId())
+                || state == EventState.IDLE || state == EventState.RESETTING) return;
+        event.setRespawnLocation(joinLocation());
+        int protection = Math.max(0, plugin.getConfig().getInt("event.death.respawn-protection-seconds", 5));
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (protection > 0) {
+                player.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE, protection * 20, 4, false, false, true));
+            }
+            messages.send(player, "respawned", Map.of("seconds", Integer.toString(protection)));
+        });
+    }
+
     private void finish(boolean victory) {
         if (state == EventState.FINISHING || state == EventState.RESETTING || state == EventState.IDLE) return;
         cancelTicker();
@@ -377,7 +416,7 @@ final class DragonEventManager implements Listener {
             if (damage.getOrDefault(uuid, 0.0) <= 0) rank = 0;
             double dealt = damage.getOrDefault(uuid, 0.0);
             String name = Bukkit.getOfflinePlayer(uuid).getName();
-            StatsManager.RecordResult result = stats.record(uuid, name == null ? uuid.toString() : name, dealt, rank);
+            StatsManager.RecordResult result = stats.record(uuid, name == null ? uuid.toString() : name, dealt, rank, eventDeaths.getOrDefault(uuid, 0));
             Player online = Bukkit.getPlayer(uuid);
             if (online != null) {
                 String resultKey = rank > 0 ? "personal-result" : "personal-result-unranked";
@@ -482,6 +521,7 @@ final class DragonEventManager implements Listener {
         returnLocations.clear();
         joinedIps.clear();
         damage.clear();
+        eventDeaths.clear();
         state = EventState.IDLE;
     }
 

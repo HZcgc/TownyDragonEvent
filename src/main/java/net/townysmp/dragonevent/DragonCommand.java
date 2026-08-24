@@ -101,12 +101,14 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
         messages.send(sender, "stats-lifetime", Map.of(
                 "damage", format(stats.totalDamage(target.getUniqueId())),
                 "participations", Integer.toString(stats.participations(target.getUniqueId())),
-                "wins", Integer.toString(stats.wins(target.getUniqueId()))));
+                "wins", Integer.toString(stats.wins(target.getUniqueId())),
+                "deaths", Integer.toString(stats.deaths(target.getUniqueId()))));
         messages.send(sender, "stats-season", Map.of(
                 "season", stats.season(),
                 "season_damage", format(stats.seasonDamage(target.getUniqueId())),
                 "season_participations", Integer.toString(stats.seasonParticipations(target.getUniqueId())),
-                "season_wins", Integer.toString(stats.seasonWins(target.getUniqueId()))));
+                "season_wins", Integer.toString(stats.seasonWins(target.getUniqueId())),
+                "season_deaths", Integer.toString(stats.seasonDeaths(target.getUniqueId()))));
         messages.send(sender, "stats-best", Map.of(
                 "personal_best", format(stats.personalBest(target.getUniqueId())), "best_rank", bestRank));
     }

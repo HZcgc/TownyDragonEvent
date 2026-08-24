@@ -39,6 +39,7 @@ final class DragonPlaceholderExpansion extends PlaceholderExpansion {
         return switch (key) {
             case "registered" -> Boolean.toString(event.isRegistered(uuid));
             case "damage" -> format(event.currentDamage(uuid));
+            case "deaths" -> Integer.toString(event.currentDeaths(uuid));
             case "rank" -> Integer.toString(event.currentRank(uuid));
             case "total_damage" -> format(stats.totalDamage(uuid));
             case "last_damage" -> format(stats.lastDamage(uuid));
@@ -46,11 +47,13 @@ final class DragonPlaceholderExpansion extends PlaceholderExpansion {
             case "wins" -> Integer.toString(stats.wins(uuid));
             case "best_rank" -> Integer.toString(stats.bestRank(uuid));
             case "personal_best" -> format(stats.personalBest(uuid));
+            case "total_deaths" -> Integer.toString(stats.deaths(uuid));
             case "season_damage" -> format(stats.seasonDamage(uuid));
             case "season_participations" -> Integer.toString(stats.seasonParticipations(uuid));
             case "season_wins" -> Integer.toString(stats.seasonWins(uuid));
             case "season_best_rank" -> Integer.toString(stats.seasonBestRank(uuid));
             case "season_personal_best" -> format(stats.seasonPersonalBest(uuid));
+            case "season_deaths" -> Integer.toString(stats.seasonDeaths(uuid));
             default -> null;
         };
     }

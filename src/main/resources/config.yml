@@ -23,6 +23,10 @@ event:
   minimum-reward-damage: 25.0
   # Removes the event world's exit portal until the Dragon is defeated.
   lock-exit-until-victory: true
+  death:
+    keep-inventory: true
+    immediate-respawn: true
+    respawn-protection-seconds: 5
   # Calm registration reminders. Players can use /dragon join from the first
   # announcement onward; they are teleported when the 5-minute lobby opens.
   announcement-seconds:
