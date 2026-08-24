@@ -11,6 +11,7 @@ import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.boss.DragonBattle;
 import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.block.Block;
 import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Entity;
@@ -57,6 +58,7 @@ final class DragonEventManager implements Listener {
     private final Map<UUID, Location> returnLocations = new HashMap<>();
     private final Map<UUID, Double> damage = new HashMap<>();
     private final Map<String, UUID> joinedIps = new HashMap<>();
+    private final List<Location> exitPortalBlocks = new ArrayList<>();
     private EventState state = EventState.IDLE;
     private World eventWorld;
     private EnderDragon dragon;
@@ -156,6 +158,7 @@ final class DragonEventManager implements Listener {
         eventWorld.setAutoSave(false);
         eventWorld.setGameRule(GameRule.DO_MOB_SPAWNING, false);
         removeEventEntities();
+        closeExitPortal();
         int joinSeconds = plugin.getConfig().getInt("event.join-seconds", 300);
         state = secondsLeft <= joinSeconds ? EventState.JOINING : EventState.SCHEDULED;
         if (state == EventState.JOINING) {
@@ -211,7 +214,8 @@ final class DragonEventManager implements Listener {
             return false;
         }
         participants.add(player.getUniqueId());
-        if (state == EventState.RESPAWNING || state == EventState.ACTIVE) {
+        if (state == EventState.RESPAWNING || state == EventState.ACTIVE
+                || (state == EventState.JOINING && eventWorld != null && player.getWorld().equals(eventWorld))) {
             lateParticipants.add(player.getUniqueId());
         }
         if (ip != null) joinedIps.put(ip, player.getUniqueId());
@@ -226,6 +230,10 @@ final class DragonEventManager implements Listener {
     }
 
     boolean leave(Player player) {
+        if (state == EventState.RESPAWNING || state == EventState.ACTIVE) {
+            messages.send(player, "leave-locked");
+            return false;
+        }
         if (!participants.remove(player.getUniqueId())) return false;
         joinedIps.values().removeIf(uuid -> uuid.equals(player.getUniqueId()));
         if (returnLocations.containsKey(player.getUniqueId())
@@ -315,7 +323,10 @@ final class DragonEventManager implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onDeath(EntityDeathEvent event) {
-        if (state == EventState.ACTIVE && event.getEntity() == dragon) finish(true);
+        if (state == EventState.ACTIVE && event.getEntity() == dragon) {
+            openExitPortal();
+            finish(true);
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -467,6 +478,7 @@ final class DragonEventManager implements Listener {
         cancelEventTasks();
         participants.clear();
         lateParticipants.clear();
+        exitPortalBlocks.clear();
         returnLocations.clear();
         joinedIps.clear();
         damage.clear();
@@ -504,6 +516,13 @@ final class DragonEventManager implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onVanillaEndPortal(PlayerPortalEvent event) {
+        if (eventWorld != null && event.getFrom().getWorld().equals(eventWorld)
+                && plugin.getConfig().getBoolean("event.lock-exit-until-victory", true)
+                && (state == EventState.JOINING || state == EventState.RESPAWNING || state == EventState.ACTIVE)) {
+            event.setCancelled(true);
+            messages.send(event.getPlayer(), "exit-locked");
+            return;
+        }
         if (state != EventState.PREPARING
                 || !plugin.getConfig().getBoolean("world.protect-vanilla-portal-during-copy", true)
                 || !plugin.getConfig().getString("world.template-folder", "").trim().isEmpty()) return;
@@ -539,6 +558,32 @@ final class DragonEventManager implements Listener {
     private void removeEventEntities() {
         for (Entity entity : eventWorld.getEntities()) {
             if (entity instanceof EnderDragon || entity instanceof EnderCrystal || entity instanceof Item) entity.remove();
+        }
+    }
+
+    private void closeExitPortal() {
+        exitPortalBlocks.clear();
+        if (!plugin.getConfig().getBoolean("event.lock-exit-until-victory", true) || eventWorld == null) return;
+        DragonBattle battle = eventWorld.getEnderDragonBattle();
+        if (battle == null || battle.getEndPortalLocation() == null) return;
+        Location center = battle.getEndPortalLocation();
+        for (int x = -4; x <= 4; x++) {
+            for (int y = -2; y <= 3; y++) {
+                for (int z = -4; z <= 4; z++) {
+                    Block block = eventWorld.getBlockAt(center.getBlockX() + x, center.getBlockY() + y, center.getBlockZ() + z);
+                    if (block.getType() == Material.END_PORTAL) {
+                        exitPortalBlocks.add(block.getLocation());
+                        block.setType(Material.AIR, false);
+                    }
+                }
+            }
+        }
+    }
+
+    private void openExitPortal() {
+        if (!plugin.getConfig().getBoolean("event.lock-exit-until-victory", true)) return;
+        for (Location location : exitPortalBlocks) {
+            if (location.getWorld() != null) location.getBlock().setType(Material.END_PORTAL, false);
         }
     }
 

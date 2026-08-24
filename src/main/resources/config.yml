@@ -21,6 +21,8 @@ event:
   block-building: true
   # Players below this damage receive no participation or damage-tier rewards.
   minimum-reward-damage: 25.0
+  # Removes the event world's exit portal until the Dragon is defeated.
+  lock-exit-until-victory: true
   # Calm registration reminders. Players can use /dragon join from the first
   # announcement onward; they are teleported when the 5-minute lobby opens.
   announcement-seconds:
