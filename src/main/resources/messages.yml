@@ -17,6 +17,7 @@ exit-locked: '<red>The exit portal is sealed.</red> <gray>It will reopen when th
 respawned: '<yellow>You returned to the Dragon arena.</yellow> <gray>Protection: <green>{seconds}s</green> <dark_gray>|</dark_gray> Remaining lives: <yellow>{remaining}</yellow>/<yellow>{maximum}</yellow>.</gray>'
 void-rescued: '<light_purple>The End pulled you back from the void.</light_purple>'
 spectator-boundary: '<red>You cannot leave the Dragon arena while spectating.</red>'
+exit-location-set: '<green>The Dragon Event exit was set to your current location.</green>'
 eliminated: '<red><bold>ELIMINATED</bold></red> <dark_gray>»</dark_gray> <gray>You reached <red>{deaths} deaths</red> and are now spectating without rewards.</gray>'
 team-wipe: '<red><bold>DEFEAT!</bold></red> <gray>Every remaining fighter was eliminated. The Ancient Dragon has won! The arena closes in <yellow>{time}</yellow>.</gray>'
 all-fighters-left: '<red><bold>DEFEAT!</bold></red> <gray>Every fighter left the arena. The Ancient Dragon has won! The arena closes in <yellow>{time}</yellow>.</gray>'

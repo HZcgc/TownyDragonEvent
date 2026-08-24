@@ -67,6 +67,14 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
                 plugin.reloadPlugin();
                 sender.sendMessage("TownyDragonEvent reloaded.");
             }
+            case "setexit" -> {
+                if (!admin(sender)) return true;
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage("Only a player can set the Dragon exit location.");
+                    return true;
+                }
+                manager.setExitLocation(player);
+            }
             case "season" -> {
                 if (!admin(sender)) return true;
                 if (args.length < 2 || !args[1].matches("[A-Za-z0-9_-]{1,32}")) {
@@ -76,7 +84,7 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
                 stats.setSeason(args[1]);
                 messages.send(sender, "season-changed", Map.of("season", args[1]));
             }
-            default -> sender.sendMessage("/dragon <join|leave|status|stats|start|stop|reload|season>");
+            default -> sender.sendMessage("/dragon <join|leave|status|stats|start|stop|reload|setexit|season>");
         }
         return true;
     }
@@ -132,7 +140,7 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
                                                  @NotNull String alias, @NotNull String[] args) {
         if (args.length != 1) return List.of();
         List<String> choices = new ArrayList<>(List.of("join", "leave", "status", "stats"));
-        if (sender.hasPermission("townysmp.dragon.admin")) choices.addAll(List.of("start", "stop", "reload", "season"));
+        if (sender.hasPermission("townysmp.dragon.admin")) choices.addAll(List.of("start", "stop", "reload", "setexit", "season"));
         String prefix = args[0].toLowerCase(Locale.ROOT);
         return choices.stream().filter(value -> value.startsWith(prefix)).toList();
     }

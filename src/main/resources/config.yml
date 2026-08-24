@@ -6,12 +6,26 @@ world:
   vanilla-end-folder: world_the_end
   runtime-name: dragonevent_end
   join-location: { x: 0.5, y: 65.0, z: 18.5, yaw: 180.0, pitch: 0.0 }
-  fallback-command: spawn {player}
+  # Set this in-game while standing at the server spawn: /dragon setexit
+  # While unset, the spawn point of the first loaded overworld is used.
+  exit-location:
+    world: ''
+    x: 0.0
+    y: 64.0
+    z: 0.0
+    yaw: 0.0
+    pitch: 0.0
+  spectator-location: { x: 0.5, y: 100.0, z: 0.5, yaw: 0.0, pitch: 45.0 }
+  spectator-boundary:
+    min-y: 0.0
+    max-y: 220.0
+    # Reasserts spectator flight and checks the position four times per second.
+    check-interval-ticks: 5
   border:
     enabled: true
     center-x: 0.0
     center-z: 0.0
-    # Diameter in blocks. Spectators are additionally prevented from crossing it.
+    # Diameter in blocks. A separate guard teleports spectators back inside.
     size: 512.0
     warning-distance: 16
   # Prevents clients entering world_the_end while it is briefly saved and
