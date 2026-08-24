@@ -117,6 +117,40 @@ final class DragonEventManager implements Listener {
         plugin.saveConfig();
         messages.send(player, "exit-location-set");
     }
+    void setArenaSpawn(Player player) {
+        if (!isTemplateWorld(player)) return;
+        Location location = player.getLocation();
+        plugin.getConfig().set("world.join-location.x", location.getX());
+        plugin.getConfig().set("world.join-location.y", location.getY());
+        plugin.getConfig().set("world.join-location.z", location.getZ());
+        plugin.getConfig().set("world.join-location.yaw", location.getYaw());
+        plugin.getConfig().set("world.join-location.pitch", location.getPitch());
+        plugin.saveConfig();
+        messages.send(player, "arena-spawn-set", locationReplacements(location));
+    }
+    void setPortalLocation(Player player) {
+        if (!isTemplateWorld(player)) return;
+        Location location = detectPortalCenter(player);
+        plugin.getConfig().set("world.portal-location.set", true);
+        plugin.getConfig().set("world.portal-location.x", location.getBlockX());
+        plugin.getConfig().set("world.portal-location.y", location.getBlockY());
+        plugin.getConfig().set("world.portal-location.z", location.getBlockZ());
+        plugin.saveConfig();
+        messages.send(player, "portal-location-set", locationReplacements(location));
+        if (Math.abs(location.getBlockX()) > 16 || Math.abs(location.getBlockZ()) > 16) {
+            messages.send(player, "portal-origin-warning");
+        }
+    }
+
+    private boolean isTemplateWorld(Player player) {
+        String configuredTemplate = plugin.getConfig().getString("world.template-folder", "").trim();
+        String templateWorld = configuredTemplate.isEmpty()
+                ? plugin.getConfig().getString("world.vanilla-end-folder", "world_the_end").trim()
+                : configuredTemplate;
+        if (player.getWorld().getName().equals(templateWorld)) return true;
+        messages.send(player, "template-world-required", Map.of("world", templateWorld));
+        return false;
+    }
     int currentRank(UUID uuid) {
         if (spectators.contains(uuid) || departedParticipants.contains(uuid)
                 || !damage.containsKey(uuid) || damage.getOrDefault(uuid, 0.0) <= 0) return 0;
@@ -312,20 +346,37 @@ final class DragonEventManager implements Listener {
             return;
         }
         DragonBattle battle = eventWorld.getEnderDragonBattle();
-        if (battle == null || battle.getEndPortalLocation() == null) {
-            plugin.getLogger().severe("Template world has no completed End portal. Prepare the template after killing its original dragon once.");
+        if (battle == null) {
+            plugin.getLogger().severe("The event world has no Ender Dragon battle state.");
+            finish(false);
+            return;
+        }
+        if (battle.getEndPortalLocation() == null) {
+            battle.setPreviouslyKilled(true);
+            battle.generateEndPortal(false);
+        }
+        Location portal = portalLocation(battle);
+        if (portal == null) {
+            plugin.getLogger().severe("No Dragon portal center is available. Use /dragon setportal in the template map.");
             finish(false);
             return;
         }
         state = EventState.RESPAWNING;
         messages.broadcast("respawn-start", Map.of(), "respawn");
-        Location center = battle.getEndPortalLocation().clone().add(0.5, 1.0, 0.5);
+        Location center = portal.clone().add(0.5, 1.0, 0.5);
+        List<EnderCrystal> respawnCrystals = new ArrayList<>();
         for (int[] offset : CRYSTAL_OFFSETS) {
             EnderCrystal crystal = eventWorld.spawn(center.clone().add(offset[0], 0, offset[1]), EnderCrystal.class);
             crystal.setShowingBottom(false);
             crystal.addScoreboardTag("townysmp_dragon_respawn");
+            respawnCrystals.add(crystal);
         }
-        Bukkit.getScheduler().runTaskLater(plugin, () -> battle.initiateRespawn(), 2L);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (!battle.initiateRespawn(respawnCrystals)) {
+                plugin.getLogger().severe("Paper rejected the Dragon respawn sequence. Verify /dragon setportal and the template world.");
+                finish(false);
+            }
+        }, 2L);
         ticker = Bukkit.getScheduler().runTaskTimer(plugin, this::watchRespawn, 20L, 20L);
     }
 
@@ -860,6 +911,49 @@ final class DragonEventManager implements Listener {
         return fallback == null ? null : fallback.getSpawnLocation().clone().add(0.5, 0.0, 0.5);
     }
 
+    private Location portalLocation(DragonBattle battle) {
+        if (eventWorld == null) return null;
+        if (plugin.getConfig().getBoolean("world.portal-location.set", false)) {
+            return new Location(eventWorld,
+                    plugin.getConfig().getInt("world.portal-location.x"),
+                    plugin.getConfig().getInt("world.portal-location.y"),
+                    plugin.getConfig().getInt("world.portal-location.z"));
+        }
+        return battle == null ? null : battle.getEndPortalLocation();
+    }
+
+    private Location detectPortalCenter(Player player) {
+        Location origin = player.getLocation();
+        World world = player.getWorld();
+        long totalX = 0;
+        long totalZ = 0;
+        int portalY = Integer.MIN_VALUE;
+        int count = 0;
+        for (int x = origin.getBlockX() - 8; x <= origin.getBlockX() + 8; x++) {
+            for (int y = origin.getBlockY() - 8; y <= origin.getBlockY() + 4; y++) {
+                for (int z = origin.getBlockZ() - 8; z <= origin.getBlockZ() + 8; z++) {
+                    if (world.getBlockAt(x, y, z).getType() != Material.END_PORTAL) continue;
+                    totalX += x;
+                    totalZ += z;
+                    portalY = Math.max(portalY, y);
+                    count++;
+                }
+            }
+        }
+        if (count > 0) {
+            return new Location(world, Math.round((double) totalX / count), portalY, Math.round((double) totalZ / count));
+        }
+        return origin.getBlock().getRelative(0, -1, 0).getLocation();
+    }
+
+    private Map<String, String> locationReplacements(Location location) {
+        return Map.of(
+                "world", location.getWorld() == null ? "-" : location.getWorld().getName(),
+                "x", String.format(Locale.US, "%.1f", location.getX()),
+                "y", String.format(Locale.US, "%.1f", location.getY()),
+                "z", String.format(Locale.US, "%.1f", location.getZ()));
+    }
+
     private Location joinLocation() {
         return new Location(eventWorld,
                 plugin.getConfig().getDouble("world.join-location.x", 0.5),
@@ -909,9 +1003,15 @@ final class DragonEventManager implements Listener {
     private void configureWorldBorder() {
         if (eventWorld == null || !plugin.getConfig().getBoolean("world.border.enabled", true)) return;
         WorldBorder border = eventWorld.getWorldBorder();
-        border.setCenter(
-                plugin.getConfig().getDouble("world.border.center-x", 0.0),
-                plugin.getConfig().getDouble("world.border.center-z", 0.0));
+        boolean centerOnPortal = plugin.getConfig().getBoolean("world.border.center-on-portal", true)
+                && plugin.getConfig().getBoolean("world.portal-location.set", false);
+        double centerX = centerOnPortal
+                ? plugin.getConfig().getInt("world.portal-location.x") + 0.5
+                : plugin.getConfig().getDouble("world.border.center-x", 0.0);
+        double centerZ = centerOnPortal
+                ? plugin.getConfig().getInt("world.portal-location.z") + 0.5
+                : plugin.getConfig().getDouble("world.border.center-z", 0.0);
+        border.setCenter(centerX, centerZ);
         border.setSize(Math.max(64.0, plugin.getConfig().getDouble("world.border.size", 512.0)));
         border.setWarningDistance(Math.max(0, plugin.getConfig().getInt("world.border.warning-distance", 16)));
     }
@@ -930,16 +1030,23 @@ final class DragonEventManager implements Listener {
     private void sealExitPortal() {
         if (!plugin.getConfig().getBoolean("event.lock-exit-until-victory", true) || eventWorld == null) return;
         DragonBattle battle = eventWorld.getEnderDragonBattle();
-        if (battle == null || battle.getEndPortalLocation() == null) return;
-        Location center = battle.getEndPortalLocation();
-        for (int x = -4; x <= 4; x++) {
-            for (int y = -2; y <= 3; y++) {
-                for (int z = -4; z <= 4; z++) {
-                    Block block = eventWorld.getBlockAt(center.getBlockX() + x, center.getBlockY() + y, center.getBlockZ() + z);
-                    if (block.getType() == Material.END_PORTAL) {
-                        Location location = block.getLocation();
-                        if (!exitPortalBlocks.contains(location)) exitPortalBlocks.add(location);
-                        block.setType(Material.AIR, false);
+        if (battle == null) return;
+        List<Location> centers = new ArrayList<>();
+        Location configured = portalLocation(battle);
+        Location vanilla = battle.getEndPortalLocation();
+        if (configured != null) centers.add(configured);
+        if (vanilla != null && centers.stream().noneMatch(location -> location.getBlockX() == vanilla.getBlockX()
+                && location.getBlockY() == vanilla.getBlockY() && location.getBlockZ() == vanilla.getBlockZ())) centers.add(vanilla);
+        for (Location center : centers) {
+            for (int x = -4; x <= 4; x++) {
+                for (int y = -2; y <= 3; y++) {
+                    for (int z = -4; z <= 4; z++) {
+                        Block block = eventWorld.getBlockAt(center.getBlockX() + x, center.getBlockY() + y, center.getBlockZ() + z);
+                        if (block.getType() == Material.END_PORTAL) {
+                            Location location = block.getLocation();
+                            if (!exitPortalBlocks.contains(location)) exitPortalBlocks.add(location);
+                            block.setType(Material.AIR, false);
+                        }
                     }
                 }
             }

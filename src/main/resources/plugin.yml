@@ -9,7 +9,7 @@ softdepend: [PlaceholderAPI]
 commands:
   dragon:
     description: TownySMP Dragon Event
-    usage: /dragon <join|leave|status|start|stop|reload|setexit>
+    usage: /dragon <join|leave|status|stats|start|stop|reload|setspawn|setportal|setexit|season>
 permissions:
   townysmp.dragon.join:
     default: true

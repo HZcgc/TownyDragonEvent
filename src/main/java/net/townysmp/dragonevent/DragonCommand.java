@@ -69,11 +69,30 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
             }
             case "setexit" -> {
                 if (!admin(sender)) return true;
+                if (!idle(sender)) return true;
                 if (!(sender instanceof Player player)) {
                     sender.sendMessage("Only a player can set the Dragon exit location.");
                     return true;
                 }
                 manager.setExitLocation(player);
+            }
+            case "setspawn" -> {
+                if (!admin(sender)) return true;
+                if (!idle(sender)) return true;
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage("Only a player can set the Dragon arena spawn.");
+                    return true;
+                }
+                manager.setArenaSpawn(player);
+            }
+            case "setportal" -> {
+                if (!admin(sender)) return true;
+                if (!idle(sender)) return true;
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage("Only a player can set the Dragon portal center.");
+                    return true;
+                }
+                manager.setPortalLocation(player);
             }
             case "season" -> {
                 if (!admin(sender)) return true;
@@ -84,7 +103,7 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
                 stats.setSeason(args[1]);
                 messages.send(sender, "season-changed", Map.of("season", args[1]));
             }
-            default -> sender.sendMessage("/dragon <join|leave|status|stats|start|stop|reload|setexit|season>");
+            default -> sender.sendMessage("/dragon <join|leave|status|stats|start|stop|reload|setspawn|setportal|setexit|season>");
         }
         return true;
     }
@@ -129,6 +148,12 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
         return false;
     }
 
+    private boolean idle(CommandSender sender) {
+        if (manager.state() == EventState.IDLE) return true;
+        sender.sendMessage("Stop the active Dragon Event before changing locations.");
+        return false;
+    }
+
     private void status(CommandSender sender) {
         messages.send(sender, "status", Map.of(
                 "state", manager.state().name(),
@@ -140,7 +165,9 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
                                                  @NotNull String alias, @NotNull String[] args) {
         if (args.length != 1) return List.of();
         List<String> choices = new ArrayList<>(List.of("join", "leave", "status", "stats"));
-        if (sender.hasPermission("townysmp.dragon.admin")) choices.addAll(List.of("start", "stop", "reload", "setexit", "season"));
+        if (sender.hasPermission("townysmp.dragon.admin")) {
+            choices.addAll(List.of("start", "stop", "reload", "setspawn", "setportal", "setexit", "season"));
+        }
         String prefix = args[0].toLowerCase(Locale.ROOT);
         return choices.stream().filter(value -> value.startsWith(prefix)).toList();
     }
