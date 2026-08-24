@@ -16,6 +16,7 @@ event:
   join-seconds: 300
   finish-delay-seconds: 120
   dragon-health: 1000.0
+  fight-time-limit-seconds: 900
   minimum-players: 1
   one-account-per-ip: true
   block-building: true
@@ -27,6 +28,15 @@ event:
     keep-inventory: true
     immediate-respawn: true
     respawn-protection-seconds: 5
+    slow-falling-seconds: 8
+    spectator-after-deaths: 5
+    # Console commands on every normal arena respawn. Useful for food/arrows.
+    respawn-commands: []
+  void-rescue:
+    enabled: true
+    trigger-y: -10.0
+    cooldown-seconds: 10
+    slow-falling-seconds: 8
   # Calm registration reminders. Players can use /dragon join from the first
   # announcement onward; they are teleported when the 5-minute lobby opens.
   announcement-seconds:
@@ -94,6 +104,8 @@ rewards:
   # Used instead of participation when joining after crystal summoning began.
   late-participation:
     - eco give {player} 250
+  no-death:
+    - eco give {player} 500
   rank-1:
     - eco give {player} 5000
   rank-2:
