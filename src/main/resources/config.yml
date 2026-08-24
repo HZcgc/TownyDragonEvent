@@ -77,6 +77,7 @@ notifications:
     pitch: 1.0
     title: true
 rewards:
+  # Per-player variables: {player}, {uuid}, {damage}, {rank}, {players}, {player_count}
   participation:
     - eco give {player} 500
   rank-1:
@@ -85,3 +86,5 @@ rewards:
     - eco give {player} 3000
   rank-3:
     - eco give {player} 2000
+  # Executed once after the ranking. Useful for broadcasts and integrations.
+  event-end: []

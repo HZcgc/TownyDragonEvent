@@ -8,17 +8,23 @@ import java.util.Objects;
 public final class TownyDragonEventPlugin extends JavaPlugin {
     private Messages messages;
     private DragonEventManager eventManager;
+    private StatsManager statsManager;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         messages = new Messages(this);
-        eventManager = new DragonEventManager(this, messages);
+        statsManager = new StatsManager(this);
+        eventManager = new DragonEventManager(this, messages, statsManager);
         DragonCommand command = new DragonCommand(this, eventManager, messages);
         PluginCommand dragon = Objects.requireNonNull(getCommand("dragon"));
         dragon.setExecutor(command);
         dragon.setTabCompleter(command);
         getServer().getPluginManager().registerEvents(eventManager, this);
+        if (getServer().getPluginManager().isPluginEnabled("PlaceholderAPI")) {
+            new DragonPlaceholderExpansion(this, eventManager, statsManager).register();
+            getLogger().info("PlaceholderAPI integration enabled.");
+        }
         eventManager.recoverAfterRestart();
         getLogger().info("TownyDragonEvent is ready. Event world: " + eventManager.runtimeWorldName());
     }
@@ -26,6 +32,7 @@ public final class TownyDragonEventPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         if (eventManager != null) eventManager.shutdown();
+        if (statsManager != null) statsManager.save();
     }
 
     void reloadPlugin() {

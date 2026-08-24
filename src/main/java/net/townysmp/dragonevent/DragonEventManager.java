@@ -49,6 +49,7 @@ final class DragonEventManager implements Listener {
 
     private final TownyDragonEventPlugin plugin;
     private final Messages messages;
+    private final StatsManager stats;
     private final Set<UUID> participants = new HashSet<>();
     private final Map<UUID, Location> returnLocations = new HashMap<>();
     private final Map<UUID, Double> damage = new HashMap<>();
@@ -61,13 +62,26 @@ final class DragonEventManager implements Listener {
     private BukkitTask resetTask;
     private int secondsLeft;
 
-    DragonEventManager(TownyDragonEventPlugin plugin, Messages messages) {
+    DragonEventManager(TownyDragonEventPlugin plugin, Messages messages, StatsManager stats) {
         this.plugin = plugin;
         this.messages = messages;
+        this.stats = stats;
     }
 
     EventState state() { return state; }
     int playerCount() { return participants.size(); }
+    int secondsRemaining() { return Math.max(0, secondsLeft); }
+    String timeRemaining() { return formatTime(secondsRemaining()); }
+    boolean isRegistered(UUID uuid) { return participants.contains(uuid); }
+    double currentDamage(UUID uuid) { return damage.getOrDefault(uuid, 0.0); }
+    int currentRank(UUID uuid) {
+        if (!damage.containsKey(uuid) || damage.getOrDefault(uuid, 0.0) <= 0) return 0;
+        List<UUID> ranking = damage.entrySet().stream().filter(entry -> entry.getValue() > 0)
+                .sorted(Map.Entry.<UUID, Double>comparingByValue(Comparator.reverseOrder()))
+                .map(Map.Entry::getKey).toList();
+        int index = ranking.indexOf(uuid);
+        return index < 0 ? 0 : index + 1;
+    }
     String runtimeWorldName() { return plugin.getConfig().getString("world.runtime-name", "dragonevent_end"); }
 
     synchronized boolean start(Integer customSeconds) {
@@ -142,7 +156,7 @@ final class DragonEventManager implements Listener {
         int joinSeconds = plugin.getConfig().getInt("event.join-seconds", 300);
         state = secondsLeft <= joinSeconds ? EventState.JOINING : EventState.SCHEDULED;
         if (state == EventState.JOINING) {
-            messages.broadcast("lobby-open", Map.of(), "lobby");
+            messages.broadcast("lobby-open", playerCountReplacement(), "lobby");
         }
         announceCountdown();
         secondsLeft--;
@@ -154,7 +168,7 @@ final class DragonEventManager implements Listener {
         if (state == EventState.SCHEDULED
                 && secondsLeft <= plugin.getConfig().getInt("event.join-seconds", 300)) {
             state = EventState.JOINING;
-            messages.broadcast("lobby-open", Map.of(), "lobby");
+            messages.broadcast("lobby-open", playerCountReplacement(), "lobby");
             teleportRegisteredPlayers();
         }
         if (secondsLeft <= 0) {
@@ -168,9 +182,9 @@ final class DragonEventManager implements Listener {
     private void announceCountdown() {
         if (secondsLeft <= 0) return;
         if (plugin.getConfig().getIntegerList("event.announcement-seconds").contains(secondsLeft)) {
-            messages.broadcast("announcement", Map.of("time", formatTime(secondsLeft)), "announcement");
+            messages.broadcast("announcement", Map.of("time", formatTime(secondsLeft), "players", Integer.toString(playerCount())), "announcement");
         } else if (secondsLeft == plugin.getConfig().getInt("event.last-chance-seconds", 180)) {
-            messages.broadcast("last-chance", Map.of("time", formatTime(secondsLeft)), "last-chance");
+            messages.broadcast("last-chance", Map.of("time", formatTime(secondsLeft), "players", Integer.toString(playerCount())), "last-chance");
         } else if (plugin.getConfig().getIntegerList("event.final-countdown-seconds").contains(secondsLeft)) {
             messages.broadcast("countdown", Map.of("time", formatTime(secondsLeft)), "countdown");
         }
@@ -331,20 +345,55 @@ final class DragonEventManager implements Listener {
                 .filter(entry -> entry.getValue() > 0)
                 .sorted(Map.Entry.<UUID, Double>comparingByValue(Comparator.reverseOrder()))
                 .toList();
-        for (UUID uuid : participants) runRewardCommands("rewards.participation", uuid);
-        for (int i = 0; i < Math.min(3, ranking.size()); i++) {
-            runRewardCommands("rewards.rank-" + (i + 1), ranking.get(i).getKey());
+        String players = participantNames();
+        for (UUID uuid : participants) {
+            int rank = ranking.stream().map(Map.Entry::getKey).toList().indexOf(uuid) + 1;
+            if (damage.getOrDefault(uuid, 0.0) <= 0) rank = 0;
+            double dealt = damage.getOrDefault(uuid, 0.0);
+            stats.record(uuid, dealt, rank);
+            runRewardCommands("rewards.participation", uuid, rank, dealt, players);
         }
+        for (int i = 0; i < Math.min(3, ranking.size()); i++) {
+            runRewardCommands("rewards.rank-" + (i + 1), ranking.get(i).getKey(), i + 1, ranking.get(i).getValue(), players);
+        }
+        runEventEndCommands(players);
+        stats.save();
     }
 
-    private void runRewardCommands(String path, UUID uuid) {
+    private void runRewardCommands(String path, UUID uuid, int rank, double dealt, String players) {
         Player player = Bukkit.getPlayer(uuid);
         String name = player != null ? player.getName() : Bukkit.getOfflinePlayer(uuid).getName();
         if (name == null) return;
         ConsoleCommandSender console = Bukkit.getConsoleSender();
         for (String command : plugin.getConfig().getStringList(path)) {
-            Bukkit.dispatchCommand(console, command.replace("{player}", name));
+            Bukkit.dispatchCommand(console, applyCommandVariables(command, name, uuid, rank, dealt, players));
         }
+    }
+
+    private void runEventEndCommands(String players) {
+        for (String command : plugin.getConfig().getStringList("rewards.event-end")) {
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command
+                    .replace("{players}", players)
+                    .replace("{player_count}", Integer.toString(participants.size())));
+        }
+    }
+
+    private String applyCommandVariables(String command, String name, UUID uuid, int rank, double dealt, String players) {
+        return command.replace("{player}", name)
+                .replace("{uuid}", uuid.toString())
+                .replace("{rank}", Integer.toString(rank))
+                .replace("{damage}", String.format(Locale.US, "%.2f", dealt))
+                .replace("{players}", players)
+                .replace("{player_count}", Integer.toString(participants.size()));
+    }
+
+    private String participantNames() {
+        return participants.stream().map(Bukkit::getOfflinePlayer).map(player -> player.getName() == null ? player.getUniqueId().toString() : player.getName())
+                .sorted(String.CASE_INSENSITIVE_ORDER).reduce((left, right) -> left + "," + right).orElse("");
+    }
+
+    private Map<String, String> playerCountReplacement() {
+        return Map.of("players", Integer.toString(playerCount()));
     }
 
     private void evacuateAndReset() {

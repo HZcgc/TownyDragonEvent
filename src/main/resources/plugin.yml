@@ -5,6 +5,7 @@ api-version: '1.21'
 author: TownySMP
 description: Isolated Ender Dragon events with a vanilla respawn sequence.
 website: https://github.com/HZcgc/TownyDragonEvent
+softdepend: [PlaceholderAPI]
 commands:
   dragon:
     description: TownySMP Dragon Event
