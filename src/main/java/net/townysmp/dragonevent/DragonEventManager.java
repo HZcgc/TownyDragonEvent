@@ -187,7 +187,7 @@ final class DragonEventManager implements Listener {
             crystal.setShowingBottom(false);
             crystal.addScoreboardTag("townysmp_dragon_respawn");
         }
-        Bukkit.getScheduler().runTaskLater(plugin, battle::initiateRespawn, 2L);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> battle.initiateRespawn(), 2L);
         ticker = Bukkit.getScheduler().runTaskTimer(plugin, this::watchRespawn, 20L, 20L);
     }
 
