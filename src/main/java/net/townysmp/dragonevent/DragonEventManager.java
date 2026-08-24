@@ -375,11 +375,20 @@ final class DragonEventManager implements Listener {
             finish(false);
             return;
         }
-        if (battle.getEndPortalLocation() == null) {
-            battle.setPreviouslyKilled(true);
-            battle.generateEndPortal(false);
+        battle.setPreviouslyKilled(true);
+        boolean configuredPortal = plugin.getConfig().getBoolean("world.portal-location.set", false);
+        Location portal;
+        if (configuredPortal) {
+            portal = portalLocation(battle);
+            if (portal == null || !forceBattlePortalLocation(battle, portal)) {
+                plugin.getLogger().severe("Could not apply the configured Dragon portal center to Paper's DragonBattle.");
+                finish(false);
+                return;
+            }
+        } else {
+            if (battle.getEndPortalLocation() == null) battle.generateEndPortal(false);
+            portal = battle.getEndPortalLocation();
         }
-        Location portal = portalLocation(battle);
         if (portal == null) {
             plugin.getLogger().severe("No Dragon portal center is available. Use /dragon setportal in the template map.");
             finish(false);
@@ -402,6 +411,50 @@ final class DragonEventManager implements Listener {
             }
         }, 2L);
         ticker = Bukkit.getScheduler().runTaskTimer(plugin, this::watchRespawn, 20L, 20L);
+    }
+
+    /**
+     * Paper does not expose a public setter for the DragonBattle portal center.
+     * Without this, a custom fountain that differs slightly from the Vanilla
+     * block pattern makes Minecraft generate a second fountain at the heightmap.
+     * Paper 1.21.11 runs with Mojang mappings, so keep both known field names as
+     * a guarded compatibility fallback and verify the value through Bukkit API.
+     */
+    private boolean forceBattlePortalLocation(DragonBattle battle, Location portal) {
+        try {
+            java.lang.reflect.Field handleField = findField(battle.getClass(), "handle");
+            handleField.setAccessible(true);
+            Object handle = handleField.get(battle);
+            java.lang.reflect.Field locationField = findField(handle.getClass(), "exitPortalLocation", "portalLocation");
+            locationField.setAccessible(true);
+            Class<?> blockPosClass = Class.forName("net.minecraft.core.BlockPos");
+            Object blockPos = blockPosClass.getConstructor(int.class, int.class, int.class).newInstance(
+                    portal.getBlockX(), portal.getBlockY(), portal.getBlockZ());
+            locationField.set(handle, blockPos);
+            Location applied = battle.getEndPortalLocation();
+            return applied != null
+                    && applied.getBlockX() == portal.getBlockX()
+                    && applied.getBlockY() == portal.getBlockY()
+                    && applied.getBlockZ() == portal.getBlockZ();
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Paper 1.21.11 Dragon portal location hook failed", exception);
+            return false;
+        }
+    }
+
+    private java.lang.reflect.Field findField(Class<?> type, String... names) throws NoSuchFieldException {
+        Class<?> current = type;
+        while (current != null) {
+            for (String name : names) {
+                try {
+                    return current.getDeclaredField(name);
+                } catch (NoSuchFieldException ignored) {
+                    // Continue with the next mapped name or superclass.
+                }
+            }
+            current = current.getSuperclass();
+        }
+        throw new NoSuchFieldException(String.join("/", names));
     }
 
     private void watchRespawn() {
