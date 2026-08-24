@@ -25,6 +25,7 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -499,6 +500,20 @@ final class DragonEventManager implements Listener {
                 && (state == EventState.JOINING || state == EventState.RESPAWNING || state == EventState.ACTIVE)) {
             Bukkit.getScheduler().runTaskLater(plugin, () -> teleportToEvent(event.getPlayer()), 20L);
         }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onVanillaEndPortal(PlayerPortalEvent event) {
+        if (state != EventState.PREPARING
+                || !plugin.getConfig().getBoolean("world.protect-vanilla-portal-during-copy", true)
+                || !plugin.getConfig().getString("world.template-folder", "").trim().isEmpty()) return;
+        Location target = event.getTo();
+        if (target == null || target.getWorld() == null
+                || target.getWorld().getEnvironment() != World.Environment.THE_END) return;
+        String vanillaEnd = plugin.getConfig().getString("world.vanilla-end-folder", "world_the_end");
+        if (!target.getWorld().getName().equals(vanillaEnd)) return;
+        event.setCancelled(true);
+        messages.send(event.getPlayer(), "end-temporarily-unavailable");
     }
 
     private void returnPlayer(Player player) {

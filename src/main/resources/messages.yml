@@ -1,5 +1,6 @@
 prefix: '<#ff2bd6><bold>TOWNY</bold></#ff2bd6><#38ff65><bold>SMP</bold></#38ff65> <dark_gray>»</dark_gray> '
 preparing: '<gray>The Dragon arena is being prepared...</gray>'
+end-temporarily-unavailable: '<yellow>The End is being prepared for the Dragon Event.</yellow> <gray>Please use the portal again in a few seconds.</gray>'
 lobby-open: '<yellow><bold>DRAGON</bold></yellow> <gray>» The event lobby is open! Use <yellow>/dragon join</yellow> to participate. <dark_gray>(<yellow>{players}</yellow> registered)</dark_gray></gray>'
 announcement: '<yellow><bold>DRAGON EVENT</bold></yellow> <dark_gray>»</dark_gray> <gray>The battle begins in <yellow>{time}</yellow>. Join with <yellow>/dragon join</yellow>. <dark_gray>(<yellow>{players}</yellow> registered)</dark_gray></gray>'
 last-chance: '<red><bold>LAST CHANCE</bold></red> <dark_gray>»</dark_gray> <gray>The Dragon Event begins in <yellow>{time}</yellow>. Join now with <yellow>/dragon join</yellow>! <dark_gray>(<yellow>{players}</yellow> registered)</dark_gray></gray>'

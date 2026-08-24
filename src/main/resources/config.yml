@@ -7,6 +7,9 @@ world:
   runtime-name: dragonevent_end
   join-location: { x: 0.5, y: 65.0, z: 18.5, yaw: 180.0, pitch: 0.0 }
   fallback-command: spawn {player}
+  # Prevents clients entering world_the_end while it is briefly saved and
+  # cloned. Only applies when template-folder is empty.
+  protect-vanilla-portal-during-copy: true
 event:
   # /dragon start uses this full countdown. /dragon start 30 remains useful for tests.
   countdown-seconds: 10800
