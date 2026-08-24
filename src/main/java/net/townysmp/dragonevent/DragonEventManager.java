@@ -88,6 +88,21 @@ final class DragonEventManager implements Listener {
             state = EventState.IDLE;
             return false;
         }
+        World loadedSource = Bukkit.getWorld(sourceFolder);
+        boolean reloadSource = loadedSource != null;
+        if (loadedSource != null) {
+            if (!loadedSource.getPlayers().isEmpty()) {
+                plugin.getLogger().warning("Cannot clone source world " + sourceFolder + " while players are inside it.");
+                state = EventState.IDLE;
+                return false;
+            }
+            loadedSource.save();
+            if (!Bukkit.unloadWorld(loadedSource, true)) {
+                plugin.getLogger().severe("Could not safely unload source world " + sourceFolder + " for cloning.");
+                state = EventState.IDLE;
+                return false;
+            }
+        }
         CompletableFuture.runAsync(() -> {
             try {
                 WorldFiles.copy(template, runtime);
@@ -95,6 +110,9 @@ final class DragonEventManager implements Listener {
                 throw new RuntimeException(ex);
             }
         }).whenComplete((ignored, error) -> Bukkit.getScheduler().runTask(plugin, () -> {
+            if (reloadSource && Bukkit.getWorld(sourceFolder) == null) {
+                new WorldCreator(sourceFolder).environment(World.Environment.THE_END).createWorld();
+            }
             if (error != null) {
                 plugin.getLogger().log(Level.SEVERE, "Could not prepare the event world", error);
                 state = EventState.IDLE;
