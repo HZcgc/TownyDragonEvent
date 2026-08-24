@@ -72,7 +72,7 @@ final class DragonEventManager implements Listener {
         if (state != EventState.IDLE) return false;
         state = EventState.PREPARING;
         secondsLeft = customSeconds == null
-                ? plugin.getConfig().getInt("event.join-seconds", 300)
+                ? plugin.getConfig().getInt("event.countdown-seconds", 10800)
                 : Math.max(10, customSeconds);
         Bukkit.broadcast(messages.get("preparing"));
 
@@ -118,12 +118,12 @@ final class DragonEventManager implements Listener {
                 state = EventState.IDLE;
                 return;
             }
-            loadWorldAndOpenLobby();
+            loadWorldAndStartCountdown();
         }));
         return true;
     }
 
-    private void loadWorldAndOpenLobby() {
+    private void loadWorldAndStartCountdown() {
         if (state != EventState.PREPARING) return;
         eventWorld = new WorldCreator(runtimeWorldName())
                 .environment(World.Environment.THE_END)
@@ -137,18 +137,36 @@ final class DragonEventManager implements Listener {
         eventWorld.setAutoSave(false);
         eventWorld.setGameRule(GameRule.DO_MOB_SPAWNING, false);
         removeEventEntities();
-        state = EventState.JOINING;
-        Bukkit.broadcast(messages.get("lobby-open"));
-        ticker = Bukkit.getScheduler().runTaskTimer(plugin, this::joinTick, 20L, 20L);
+        int joinSeconds = plugin.getConfig().getInt("event.join-seconds", 300);
+        state = secondsLeft <= joinSeconds ? EventState.JOINING : EventState.SCHEDULED;
+        if (state == EventState.JOINING) {
+            messages.broadcast("lobby-open", Map.of(), "lobby");
+        }
+        announceCountdown();
+        secondsLeft--;
+        ticker = Bukkit.getScheduler().runTaskTimer(plugin, this::eventTick, 20L, 20L);
     }
 
-    private void joinTick() {
-        if (state != EventState.JOINING) return;
-        if (secondsLeft == 300 || secondsLeft == 180 || secondsLeft == 120 || secondsLeft == 60
-                || secondsLeft == 30 || secondsLeft == 10 || secondsLeft <= 5) {
-            Bukkit.broadcast(messages.get("countdown", Map.of("time", formatTime(secondsLeft))));
+    private void eventTick() {
+        if (state != EventState.SCHEDULED && state != EventState.JOINING) return;
+        if (state == EventState.SCHEDULED
+                && secondsLeft <= plugin.getConfig().getInt("event.join-seconds", 300)) {
+            state = EventState.JOINING;
+            messages.broadcast("lobby-open", Map.of(), "lobby");
         }
-        if (secondsLeft-- <= 0) beginRespawn();
+        if (secondsLeft <= 0) {
+            beginRespawn();
+            return;
+        }
+        announceCountdown();
+        secondsLeft--;
+    }
+
+    private void announceCountdown() {
+        if (secondsLeft <= 0) return;
+        if (plugin.getConfig().getIntegerList("event.announcement-seconds").contains(secondsLeft)) {
+            messages.broadcast("countdown", Map.of("time", formatTime(secondsLeft)), "countdown");
+        }
     }
 
     boolean join(Player player) {
@@ -198,7 +216,7 @@ final class DragonEventManager implements Listener {
             return;
         }
         state = EventState.RESPAWNING;
-        Bukkit.broadcast(messages.get("respawn-start"));
+        messages.broadcast("respawn-start", Map.of(), "respawn");
         Location center = battle.getEndPortalLocation().clone().add(0.5, 1.0, 0.5);
         for (int[] offset : CRYSTAL_OFFSETS) {
             EnderCrystal crystal = eventWorld.spawn(center.clone().add(offset[0], 0, offset[1]), EnderCrystal.class);
@@ -233,10 +251,10 @@ final class DragonEventManager implements Listener {
         AttributeInstance maxHealth = dragon.getAttribute(Attribute.MAX_HEALTH);
         if (maxHealth != null) maxHealth.setBaseValue(health);
         dragon.setHealth(health);
-        dragon.customName(messages.get("fight-start", Map.of("health", String.format(Locale.US, "%.0f", health))));
+        dragon.customName(messages.getRaw("dragon-name", Map.of("health", String.format(Locale.US, "%.0f", health))));
         eventWorld.setGameRule(GameRule.DO_MOB_SPAWNING, true);
         state = EventState.ACTIVE;
-        Bukkit.broadcast(messages.get("fight-start", Map.of("health", String.format(Locale.US, "%.0f", health))));
+        messages.broadcast("fight-start", Map.of("health", String.format(Locale.US, "%.0f", health)), "fight");
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -265,7 +283,7 @@ final class DragonEventManager implements Listener {
         if (victory) {
             distributeRewards();
             int delay = plugin.getConfig().getInt("event.finish-delay-seconds", 20);
-            Bukkit.broadcast(messages.get("victory", Map.of("time", formatTime(delay))));
+            messages.broadcast("victory", Map.of("time", formatTime(delay)), "victory");
             Bukkit.getScheduler().runTaskLater(plugin, this::evacuateAndReset, Math.max(5, delay) * 20L);
         } else {
             Bukkit.getScheduler().runTaskLater(plugin, this::evacuateAndReset, 20L);
@@ -399,8 +417,19 @@ final class DragonEventManager implements Listener {
 
     private static String formatTime(int seconds) {
         Duration duration = Duration.ofSeconds(Math.max(0, seconds));
-        long minutes = duration.toMinutes();
-        long rest = duration.minusMinutes(minutes).toSeconds();
-        return minutes > 0 ? minutes + "m " + rest + "s" : rest + "s";
+        long hours = duration.toHours();
+        long minutes = duration.minusHours(hours).toMinutes();
+        long rest = duration.minusHours(hours).minusMinutes(minutes).toSeconds();
+        StringBuilder result = new StringBuilder();
+        if (hours > 0) result.append(hours).append("h");
+        if (minutes > 0) {
+            if (!result.isEmpty()) result.append(' ');
+            result.append(minutes).append("m");
+        }
+        if (rest > 0 || result.isEmpty()) {
+            if (!result.isEmpty()) result.append(' ');
+            result.append(rest).append("s");
+        }
+        return result.toString();
     }
 }

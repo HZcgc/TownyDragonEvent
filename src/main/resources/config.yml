@@ -8,12 +8,85 @@ world:
   join-location: { x: 0.5, y: 65.0, z: 18.5, yaw: 180.0, pitch: 0.0 }
   fallback-command: spawn {player}
 event:
+  # /dragon start uses this full countdown. /dragon start 30 remains useful for tests.
+  countdown-seconds: 10800
   join-seconds: 300
-  finish-delay-seconds: 20
+  finish-delay-seconds: 120
   dragon-health: 1000.0
   minimum-players: 1
   one-account-per-ip: true
   block-building: true
+  # Every configured second is announced. The countdown ends by spawning the
+  # four crystals; there is deliberately no separate "0 seconds" message.
+  announcement-seconds:
+    - 10800
+    - 7200
+    - 3600
+    - 1800
+    - 900
+    - 600
+    - 300
+    - 180
+    - 60
+    - 30
+    - 29
+    - 28
+    - 27
+    - 26
+    - 25
+    - 24
+    - 23
+    - 22
+    - 21
+    - 20
+    - 19
+    - 18
+    - 17
+    - 16
+    - 15
+    - 14
+    - 13
+    - 12
+    - 11
+    - 10
+    - 9
+    - 8
+    - 7
+    - 6
+    - 5
+    - 4
+    - 3
+    - 2
+    - 1
+notifications:
+  countdown:
+    sound: minecraft:block.note_block.pling
+    volume: 0.8
+    pitch: 1.2
+    title: true
+    fade-in-ticks: 10
+    stay-ticks: 40
+    fade-out-ticks: 10
+  lobby:
+    sound: minecraft:block.end_portal.spawn
+    volume: 0.8
+    pitch: 1.0
+    title: true
+  respawn:
+    sound: minecraft:entity.ender_dragon.growl
+    volume: 1.0
+    pitch: 0.7
+    title: true
+  fight:
+    sound: minecraft:entity.ender_dragon.growl
+    volume: 1.0
+    pitch: 1.0
+    title: true
+  victory:
+    sound: minecraft:ui.toast.challenge_complete
+    volume: 1.0
+    pitch: 1.0
+    title: true
 rewards:
   participation:
     - eco give {player} 500
