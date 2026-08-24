@@ -1,45 +1,16 @@
-name: EnderDragon
+name: TownyDragonEvent
 version: ${project.version}
-main: pers.xanadu.enderdragon.EnderDragon
-author: Xanadu13
-api-version: 1.13
-softdepend:
-  - MMOItems
-  - MythicLib
-  - PlaceholderAPI
-  - PetDragon
+main: net.townysmp.dragonevent.TownyDragonEventPlugin
+api-version: '1.21'
+author: TownySMP
+description: Isolated Ender Dragon events with a vanilla respawn sequence.
+website: https://github.com/HZcgc/TownyDragonEvent
 commands:
-  enderdragon:
-    description: "EnderDragon Command"
-    aliases: [ed]
-
+  dragon:
+    description: TownySMP Dragon Event
+    usage: /dragon <join|leave|status|start|stop|reload>
 permissions:
-  ed.admin:
-    description: "Ability to use all EnderDragon commands"
-    children:
-      ed.reload: true
-      ed.drop.edit: true
-      ed.respawn: true
-      ed.update: true
-      ed.update.notify: true
-    default: op
-  ed.reload:
-    description: "Allows you to reload EnderDragon and its configuration"
-    default: op
-  ed.drop.edit:
-    description: "Allows you to edit the drop_item of dragons"
-    default: op
-  ed.drop.gui:
-    description: "Allows you to preview the drop_item of dragons"
+  townysmp.dragon.join:
     default: true
-  ed.respawn:
-    description: "Allows you to respawn the dragon"
+  townysmp.dragon.admin:
     default: op
-  ed.update:
-    description: "Allows you to generate latest configuration file"
-    default: op
-  ed.update.notify:
-    default: op
-    description: "Notifies you when there is a EnderDragon update"
-
-website: https://www.spigotmc.org/resources/enderdragon.101583
