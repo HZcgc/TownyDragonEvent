@@ -16,8 +16,8 @@ event:
   minimum-players: 1
   one-account-per-ip: true
   block-building: true
-  # Every configured second is announced. The countdown ends by spawning the
-  # four crystals; there is deliberately no separate "0 seconds" message.
+  # Calm registration reminders. Players can use /dragon join from the first
+  # announcement onward; they are teleported when the 5-minute lobby opens.
   announcement-seconds:
     - 10800
     - 7200
@@ -26,8 +26,9 @@ event:
     - 900
     - 600
     - 300
-    - 180
-    - 60
+  last-chance-seconds: 180
+  # Short final countdown. It ends directly with the four End Crystals.
+  final-countdown-seconds:
     - 30
     - 15
     - 10
@@ -37,12 +38,21 @@ event:
     - 2
     - 1
 notifications:
+  announcement:
+    sound: minecraft:entity.ender_dragon.ambient
+    volume: 0.35
+    pitch: 0.9
+    title: false
+  last-chance:
+    sound: minecraft:entity.ender_dragon.growl
+    volume: 0.55
+    pitch: 0.85
+    title: false
   countdown:
-    # Format: sound;volume;pitch. Multiple sounds are played together.
-    sounds:
-      - minecraft:entity.lightning_bolt.thunder;0.65;0.85
-      - minecraft:entity.ender_dragon.growl;0.80;0.65
-    title: true
+    sound: minecraft:block.note_block.pling
+    volume: 0.45
+    pitch: 0.8
+    title: false
     fade-in-ticks: 10
     stay-ticks: 40
     fade-out-ticks: 10

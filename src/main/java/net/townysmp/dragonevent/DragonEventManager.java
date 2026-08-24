@@ -155,6 +155,7 @@ final class DragonEventManager implements Listener {
                 && secondsLeft <= plugin.getConfig().getInt("event.join-seconds", 300)) {
             state = EventState.JOINING;
             messages.broadcast("lobby-open", Map.of(), "lobby");
+            teleportRegisteredPlayers();
         }
         if (secondsLeft <= 0) {
             beginRespawn();
@@ -167,12 +168,18 @@ final class DragonEventManager implements Listener {
     private void announceCountdown() {
         if (secondsLeft <= 0) return;
         if (plugin.getConfig().getIntegerList("event.announcement-seconds").contains(secondsLeft)) {
+            messages.broadcast("announcement", Map.of("time", formatTime(secondsLeft)), "announcement");
+        } else if (secondsLeft == plugin.getConfig().getInt("event.last-chance-seconds", 180)) {
+            messages.broadcast("last-chance", Map.of("time", formatTime(secondsLeft)), "last-chance");
+        } else if (plugin.getConfig().getIntegerList("event.final-countdown-seconds").contains(secondsLeft)) {
             messages.broadcast("countdown", Map.of("time", formatTime(secondsLeft)), "countdown");
         }
     }
 
     boolean join(Player player) {
-        if (state != EventState.JOINING || eventWorld == null) {
+        boolean accepting = state == EventState.SCHEDULED || state == EventState.JOINING
+                || state == EventState.RESPAWNING || state == EventState.ACTIVE;
+        if (!accepting || eventWorld == null) {
             messages.send(player, "not-open");
             return false;
         }
@@ -187,20 +194,39 @@ final class DragonEventManager implements Listener {
             return false;
         }
         participants.add(player.getUniqueId());
-        returnLocations.put(player.getUniqueId(), player.getLocation().clone());
         if (ip != null) joinedIps.put(ip, player.getUniqueId());
         damage.put(player.getUniqueId(), 0.0);
-        player.teleportAsync(joinLocation());
-        messages.send(player, "joined");
+        if (state == EventState.SCHEDULED) {
+            messages.send(player, "registered");
+        } else {
+            teleportToEvent(player);
+            messages.send(player, "joined");
+        }
         return true;
     }
 
     boolean leave(Player player) {
         if (!participants.remove(player.getUniqueId())) return false;
         joinedIps.values().removeIf(uuid -> uuid.equals(player.getUniqueId()));
-        returnPlayer(player);
+        if (returnLocations.containsKey(player.getUniqueId())
+                || (eventWorld != null && player.getWorld().equals(eventWorld))) {
+            returnPlayer(player);
+        }
         messages.send(player, "left");
         return true;
+    }
+
+    private void teleportRegisteredPlayers() {
+        for (UUID uuid : participants) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null && player.isOnline()) teleportToEvent(player);
+        }
+    }
+
+    private void teleportToEvent(Player player) {
+        if (eventWorld == null || player.getWorld().equals(eventWorld)) return;
+        returnLocations.putIfAbsent(player.getUniqueId(), player.getLocation().clone());
+        player.teleportAsync(joinLocation());
     }
 
     private void beginRespawn() {
@@ -371,6 +397,9 @@ final class DragonEventManager implements Listener {
         // A crash during an event must never leave a player trapped in the disposable world.
         if (event.getPlayer().getWorld().getName().equals(runtimeWorldName()) && state == EventState.IDLE) {
             runFallback(event.getPlayer());
+        } else if (participants.contains(event.getPlayer().getUniqueId())
+                && (state == EventState.JOINING || state == EventState.RESPAWNING || state == EventState.ACTIVE)) {
+            Bukkit.getScheduler().runTaskLater(plugin, () -> teleportToEvent(event.getPlayer()), 20L);
         }
     }
 
