@@ -589,6 +589,31 @@ final class DragonEventManager implements Listener {
         cancelAprilVisual();
         dragon.setInvisible(true);
         hideAprilDragonFromEveryone();
+        spawnAprilCreeper();
+        aprilVisualTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (eventMode != EventMode.APRIL_FOOLS || state != EventState.ACTIVE
+                    || dragon == null || !dragon.isValid()) {
+                cancelAprilVisual();
+                return;
+            }
+            if (aprilCreeper == null || !aprilCreeper.isValid() || aprilCreeper.isDead()) {
+                spawnAprilCreeper();
+            }
+            if (aprilCreeper == null || !aprilCreeper.isValid()) return;
+            aprilCreeper.teleport(aprilCreeperLocation());
+            aprilCreeper.setVelocity(new Vector());
+            aprilCreeper.setFireTicks(0);
+            AttributeInstance maxHealth = aprilCreeper.getAttribute(Attribute.MAX_HEALTH);
+            if (maxHealth != null && aprilCreeper.getHealth() < maxHealth.getValue()) {
+                aprilCreeper.setHealth(maxHealth.getValue());
+            }
+        }, 1L, 1L);
+    }
+
+    private void spawnAprilCreeper() {
+        if (eventMode != EventMode.APRIL_FOOLS || state != EventState.ACTIVE
+                || eventWorld == null || dragon == null || !dragon.isValid()) return;
+        if (aprilCreeper != null && aprilCreeper.isValid() && !aprilCreeper.isDead()) return;
         Location spawn = aprilCreeperLocation();
         aprilCreeper = eventWorld.spawn(spawn, Creeper.class, creeper -> {
             creeper.setAI(false);
@@ -599,6 +624,7 @@ final class DragonEventManager implements Listener {
             creeper.setCollidable(false);
             creeper.setPowered(true);
             creeper.setExplosionRadius(0);
+            creeper.setFireTicks(0);
             creeper.addScoreboardTag("townysmp_april_creeper");
             creeper.customName(messages.getRaw("april-creeper-name", Map.of()));
             creeper.setCustomNameVisible(true);
@@ -608,15 +634,6 @@ final class DragonEventManager implements Listener {
                         plugin.getConfig().getDouble("april-fools.creeper-scale", 6.0))));
             }
         });
-        aprilVisualTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            if (eventMode != EventMode.APRIL_FOOLS || state != EventState.ACTIVE
-                    || dragon == null || !dragon.isValid() || aprilCreeper == null || !aprilCreeper.isValid()) {
-                cancelAprilVisual();
-                return;
-            }
-            aprilCreeper.teleport(aprilCreeperLocation());
-            aprilCreeper.setVelocity(new Vector());
-        }, 1L, 1L);
     }
 
     /**
@@ -684,14 +701,21 @@ final class DragonEventManager implements Listener {
         damage.merge(attacker.getUniqueId(), event.getFinalDamage(), Double::sum);
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onAprilCreeperDamage(EntityDamageByEntityEvent event) {
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onAprilCreeperDamage(EntityDamageEvent event) {
         if (eventMode != EventMode.APRIL_FOOLS || state != EventState.ACTIVE
                 || aprilCreeper == null || event.getEntity() != aprilCreeper) return;
+        boolean previouslyCancelled = event.isCancelled();
         double forwardedDamage = Math.max(0.0, event.getFinalDamage());
-        Player attacker = resolvePlayer(event.getDamager());
+        Player attacker = event instanceof EntityDamageByEntityEvent byEntity
+                ? resolvePlayer(byEntity.getDamager()) : null;
         event.setCancelled(true);
-        if (attacker == null || !participants.contains(attacker.getUniqueId())
+        aprilCreeper.setFireTicks(0);
+        AttributeInstance maxHealth = aprilCreeper.getAttribute(Attribute.MAX_HEALTH);
+        if (maxHealth != null && aprilCreeper.getHealth() < maxHealth.getValue()) {
+            aprilCreeper.setHealth(maxHealth.getValue());
+        }
+        if (previouslyCancelled || attacker == null || !participants.contains(attacker.getUniqueId())
                 || dragon == null || !dragon.isValid() || forwardedDamage <= 0.0) return;
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (state == EventState.ACTIVE && dragon != null && dragon.isValid()) {
@@ -988,6 +1012,14 @@ final class DragonEventManager implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onDeath(EntityDeathEvent event) {
+        if (event.getEntity().getScoreboardTags().contains("townysmp_april_creeper")) {
+            event.getDrops().clear();
+            event.setDroppedExp(0);
+            if (eventMode == EventMode.APRIL_FOOLS && state == EventState.ACTIVE) {
+                Bukkit.getScheduler().runTask(plugin, this::spawnAprilCreeper);
+            }
+            return;
+        }
         if (state == EventState.ACTIVE && event.getEntity() == dragon) {
             Location finaleLocation = aprilCreeper != null && aprilCreeper.isValid()
                     ? aprilCreeper.getLocation().clone() : dragon.getLocation().clone();
