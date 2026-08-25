@@ -37,8 +37,10 @@ import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityCombustEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
+import org.bukkit.event.entity.ExplosionPrimeEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
@@ -299,6 +301,8 @@ final class DragonEventManager implements Listener {
         }
         eventWorld.setAutoSave(false);
         eventWorld.setGameRule(GameRule.DO_MOB_SPAWNING, false);
+        eventWorld.setGameRule(GameRule.LOCATOR_BAR,
+                plugin.getConfig().getBoolean("world.locator-bar-enabled", false));
         eventWorld.setGameRule(GameRule.MOB_GRIEFING,
                 plugin.getConfig().getBoolean("event.arena-destruction.dragon-griefing", true));
         eventWorld.setGameRule(GameRule.KEEP_INVENTORY, plugin.getConfig().getBoolean("event.death.keep-inventory", true));
@@ -602,7 +606,9 @@ final class DragonEventManager implements Listener {
             if (aprilCreeper == null || !aprilCreeper.isValid()) return;
             aprilCreeper.teleport(aprilCreeperLocation());
             aprilCreeper.setVelocity(new Vector());
+            aprilCreeper.setIgnited(false);
             aprilCreeper.setFireTicks(0);
+            aprilCreeper.setVisualFire(false);
             AttributeInstance maxHealth = aprilCreeper.getAttribute(Attribute.MAX_HEALTH);
             if (maxHealth != null && aprilCreeper.getHealth() < maxHealth.getValue()) {
                 aprilCreeper.setHealth(maxHealth.getValue());
@@ -624,7 +630,11 @@ final class DragonEventManager implements Listener {
             creeper.setCollidable(false);
             creeper.setPowered(true);
             creeper.setExplosionRadius(0);
+            creeper.setIgnited(false);
             creeper.setFireTicks(0);
+            creeper.setVisualFire(false);
+            creeper.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE,
+                    PotionEffect.INFINITE_DURATION, 0, false, false, false));
             creeper.addScoreboardTag("townysmp_april_creeper");
             creeper.customName(messages.getRaw("april-creeper-name", Map.of()));
             creeper.setCustomNameVisible(true);
@@ -710,7 +720,9 @@ final class DragonEventManager implements Listener {
         Player attacker = event instanceof EntityDamageByEntityEvent byEntity
                 ? resolvePlayer(byEntity.getDamager()) : null;
         event.setCancelled(true);
+        aprilCreeper.setIgnited(false);
         aprilCreeper.setFireTicks(0);
+        aprilCreeper.setVisualFire(false);
         AttributeInstance maxHealth = aprilCreeper.getAttribute(Attribute.MAX_HEALTH);
         if (maxHealth != null && aprilCreeper.getHealth() < maxHealth.getValue()) {
             aprilCreeper.setHealth(maxHealth.getValue());
@@ -722,6 +734,25 @@ final class DragonEventManager implements Listener {
                 dragon.damage(forwardedDamage, attacker);
             }
         });
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onAprilCreeperCombust(EntityCombustEvent event) {
+        if (eventMode != EventMode.APRIL_FOOLS || state != EventState.ACTIVE
+                || aprilCreeper == null || event.getEntity() != aprilCreeper) return;
+        event.setCancelled(true);
+        aprilCreeper.setIgnited(false);
+        aprilCreeper.setFireTicks(0);
+        aprilCreeper.setVisualFire(false);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onAprilCreeperPrime(ExplosionPrimeEvent event) {
+        if (eventMode != EventMode.APRIL_FOOLS || state != EventState.ACTIVE
+                || aprilCreeper == null || event.getEntity() != aprilCreeper) return;
+        event.setCancelled(true);
+        aprilCreeper.setIgnited(false);
+        aprilCreeper.setExplosionRadius(0);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
