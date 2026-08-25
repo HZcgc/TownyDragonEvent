@@ -83,7 +83,7 @@ event:
     limits:
       # Zero disables the corresponding limiter.
       maximum-primed-tnt: 50
-      maximum-april-projectiles: 20
+      maximum-april-projectiles: 40
     explosion-power:
       player-tnt: 4.0
       april-tnt: 5.0
@@ -202,11 +202,39 @@ april-fools:
   creeper-scale: 6.0
   vertical-offset: -4.0
   projectiles:
-    # Every Dragon fireball becomes either flying TNT or a Ghast fireball.
+    # Every Dragon fireball becomes several flying TNT/Ghast projectiles.
     tnt-chance: 0.5
     speed: 1.1
     tnt-fuse-ticks: 45
     fireball-yield: 2.0
+    dragon-shot-multiplier: 3
+    maximum-per-dragon-shot: 9
+    # Gives the Creeper its own attacks even while the carrier Dragon is not
+    # using Dragon Breath. 50 ticks = one barrage every 2.5 seconds.
+    automatic-barrage:
+      enabled: true
+      interval-ticks: 50
+      projectiles: 4
+      spread-degrees: 18.0
+  sounds:
+    enabled: true
+    # Plays boss sounds directly to everyone inside the arena, so distance
+    # from the flying Creeper cannot make it inaudible.
+    global-to-arena: true
+    ambient:
+      sound: minecraft:entity.creeper.hurt
+      interval-ticks: 80
+      volume: 1.8
+      pitch: 0.55
+    attack:
+      sound: minecraft:entity.creeper.primed
+      volume: 2.4
+      pitch: 0.65
+    hurt:
+      sound: minecraft:entity.creeper.hurt
+      cooldown-ticks: 6
+      volume: 1.6
+      pitch: 0.75
   finale:
     enabled: true
     mini-creepers: 10
@@ -222,6 +250,12 @@ victory-fireworks:
 rewards:
   # Per-player variables: {player}, {uuid}, {damage}, {rank}, {crystals},
   # {explosions}, {players}, {player_count}
+  policy:
+    # Top-three prizes are exclusive by default. A winner therefore receives
+    # only rank-1 instead of rank-1 + participation + no-death + damage tiers.
+    rank-replaces-other-rewards: true
+    # Non-ranked players receive only their highest reached damage tier.
+    highest-damage-tier-only: true
   participation:
     - eco give {player} 500
   # Used instead of participation when joining after crystal summoning began.
@@ -237,7 +271,8 @@ rewards:
     - eco give {player} 2000
   # Executed once after the ranking. Useful for broadcasts and integrations.
   event-end: []
-  # Every reached tier is executed. Keys are required Dragon damage.
+  # By default only the highest reached tier is executed. Keys are required
+  # Dragon damage; set policy.highest-damage-tier-only to false to stack them.
   damage-tiers:
     '100':
       - eco give {player} 250

@@ -120,6 +120,9 @@ final class DragonEventManager implements Listener {
     private int secondsLeft;
     private int fightSecondsLeft;
     private int closingSecondsLeft;
+    private int aprilBarrageTicks;
+    private int aprilAmbientSoundTicks;
+    private long lastAprilHurtSoundTick = -1L;
     private double effectiveDragonHealth;
     private double incomingDamageMultiplier = 1.0;
     private double dragonAttackMultiplier = 1.0;
@@ -591,6 +594,9 @@ final class DragonEventManager implements Listener {
 
     private void startAprilFoolsVisual() {
         cancelAprilVisual();
+        aprilBarrageTicks = 0;
+        aprilAmbientSoundTicks = 0;
+        lastAprilHurtSoundTick = -1L;
         dragon.setInvisible(true);
         hideAprilDragonFromEveryone();
         spawnAprilCreeper();
@@ -613,6 +619,7 @@ final class DragonEventManager implements Listener {
             if (maxHealth != null && aprilCreeper.getHealth() < maxHealth.getValue()) {
                 aprilCreeper.setHealth(maxHealth.getValue());
             }
+            tickAprilFoolsEffects();
         }, 1L, 1L);
     }
 
@@ -624,7 +631,7 @@ final class DragonEventManager implements Listener {
         aprilCreeper = eventWorld.spawn(spawn, Creeper.class, creeper -> {
             creeper.setAI(false);
             creeper.setGravity(false);
-            creeper.setSilent(true);
+            creeper.setSilent(false);
             creeper.setPersistent(true);
             creeper.setRemoveWhenFarAway(false);
             creeper.setCollidable(false);
@@ -644,6 +651,71 @@ final class DragonEventManager implements Listener {
                         plugin.getConfig().getDouble("april-fools.creeper-scale", 6.0))));
             }
         });
+    }
+
+    private void tickAprilFoolsEffects() {
+        if (aprilCreeper == null || !aprilCreeper.isValid() || eventWorld == null) return;
+        if (plugin.getConfig().getBoolean("april-fools.sounds.enabled", true)) {
+            int ambientInterval = Math.max(20,
+                    plugin.getConfig().getInt("april-fools.sounds.ambient.interval-ticks", 80));
+            if (++aprilAmbientSoundTicks >= ambientInterval) {
+                aprilAmbientSoundTicks = 0;
+                playAprilSound("april-fools.sounds.ambient", "minecraft:entity.creeper.hurt", 1.8f, 0.55f);
+            }
+        }
+        if (!plugin.getConfig().getBoolean("april-fools.projectiles.automatic-barrage.enabled", true)) return;
+        int barrageInterval = Math.max(10,
+                plugin.getConfig().getInt("april-fools.projectiles.automatic-barrage.interval-ticks", 50));
+        if (++aprilBarrageTicks >= barrageInterval) {
+            aprilBarrageTicks = 0;
+            launchAprilBarrage();
+        }
+    }
+
+    private void launchAprilBarrage() {
+        if (eventWorld == null || aprilCreeper == null || !aprilCreeper.isValid()) return;
+        List<Player> targets = participants.stream()
+                .filter(uuid -> !spectators.contains(uuid) && !departedParticipants.contains(uuid))
+                .map(Bukkit::getPlayer)
+                .filter(player -> player != null && player.isOnline() && player.getWorld().equals(eventWorld))
+                .toList();
+        if (targets.isEmpty()) return;
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        Player target = targets.get(random.nextInt(targets.size()));
+        Location source = aprilCreeper.getLocation().clone().add(0.0, -1.0, 0.0);
+        Vector direction = target.getEyeLocation().toVector().subtract(source.toVector());
+        if (direction.lengthSquared() < 0.01) direction = dragon.getLocation().getDirection();
+        direction.normalize();
+        int amount = Math.max(1, Math.min(12,
+                plugin.getConfig().getInt("april-fools.projectiles.automatic-barrage.projectiles", 4)));
+        double spread = Math.max(0.0,
+                plugin.getConfig().getDouble("april-fools.projectiles.automatic-barrage.spread-degrees", 18.0));
+        playAprilSound("april-fools.sounds.attack", "minecraft:entity.creeper.primed", 2.4f, 0.65f);
+        for (int index = 0; index < amount; index++) {
+            Vector shot = spreadDirection(direction, index, amount, spread);
+            shot.setY(shot.getY() + random.nextDouble(-0.08, 0.10));
+            if (shot.lengthSquared() < 0.01) shot = direction.clone();
+            launchAprilProjectile(source, shot.normalize());
+        }
+    }
+
+    private void playAprilSound(String path, String fallbackSound, float fallbackVolume, float fallbackPitch) {
+        if (eventWorld == null || !plugin.getConfig().getBoolean("april-fools.sounds.enabled", true)) return;
+        String sound = plugin.getConfig().getString(path + ".sound", fallbackSound);
+        if (sound == null || sound.isBlank()) return;
+        float volume = (float) Math.max(0.0, plugin.getConfig().getDouble(path + ".volume", fallbackVolume));
+        float pitch = (float) Math.max(0.01, Math.min(2.0,
+                plugin.getConfig().getDouble(path + ".pitch", fallbackPitch)));
+        boolean global = plugin.getConfig().getBoolean("april-fools.sounds.global-to-arena", true);
+        Location source = aprilCreeper != null && aprilCreeper.isValid()
+                ? aprilCreeper.getLocation() : safeJoinLocation();
+        if (!global) {
+            eventWorld.playSound(source, sound, volume, pitch);
+            return;
+        }
+        for (Player player : eventWorld.getPlayers()) {
+            player.playSound(player.getLocation(), sound, volume, pitch);
+        }
     }
 
     /**
@@ -727,6 +799,13 @@ final class DragonEventManager implements Listener {
         if (maxHealth != null && aprilCreeper.getHealth() < maxHealth.getValue()) {
             aprilCreeper.setHealth(maxHealth.getValue());
         }
+        long now = eventWorld == null ? 0L : eventWorld.getGameTime();
+        int soundCooldown = Math.max(1,
+                plugin.getConfig().getInt("april-fools.sounds.hurt.cooldown-ticks", 6));
+        if (lastAprilHurtSoundTick < 0L || now - lastAprilHurtSoundTick >= soundCooldown) {
+            lastAprilHurtSoundTick = now;
+            playAprilSound("april-fools.sounds.hurt", "minecraft:entity.creeper.hurt", 1.6f, 0.75f);
+        }
         if (previouslyCancelled || attacker == null || !participants.contains(attacker.getUniqueId())
                 || dragon == null || !dragon.isValid() || forwardedDamage <= 0.0) return;
         Bukkit.getScheduler().runTask(plugin, () -> {
@@ -766,11 +845,19 @@ final class DragonEventManager implements Listener {
         Vector finalDirection = direction;
         double originalSpeed = Math.max(0.8, fireball.getVelocity().length());
         int volley = projectileVolleySize();
+        if (eventMode == EventMode.APRIL_FOOLS) {
+            int multiplier = Math.max(1, Math.min(8,
+                    plugin.getConfig().getInt("april-fools.projectiles.dragon-shot-multiplier", 3)));
+            int maximum = Math.max(1, Math.min(24,
+                    plugin.getConfig().getInt("april-fools.projectiles.maximum-per-dragon-shot", 9)));
+            volley = Math.min(maximum, volley * multiplier);
+        }
+        int finalVolley = volley;
         if (eventMode == EventMode.APRIL_FOOLS) event.setCancelled(true);
         Bukkit.getScheduler().runTask(plugin, () -> {
-            for (int index = eventMode == EventMode.APRIL_FOOLS ? 0 : 1; index < volley; index++) {
+            for (int index = eventMode == EventMode.APRIL_FOOLS ? 0 : 1; index < finalVolley; index++) {
                 Vector spread = eventMode == EventMode.APRIL_FOOLS
-                        ? spreadDirection(finalDirection, index, volley)
+                        ? spreadDirection(finalDirection, index, finalVolley)
                         : additionalSpreadDirection(finalDirection, index);
                 if (eventMode == EventMode.APRIL_FOOLS) launchAprilProjectile(source, spread);
                 else launchAdditionalDragonFireball(source, spread, originalSpeed);
@@ -788,9 +875,14 @@ final class DragonEventManager implements Listener {
     }
 
     private Vector spreadDirection(Vector direction, int index, int total) {
+        double spreadDegrees = plugin.getConfig().getDouble(
+                "event.difficulty-scaling.projectiles.spread-degrees", 10.0);
+        return spreadDirection(direction, index, total, spreadDegrees);
+    }
+
+    private Vector spreadDirection(Vector direction, int index, int total, double spreadDegrees) {
         if (total <= 1) return direction.clone();
-        double spread = Math.toRadians(Math.max(0.0,
-                plugin.getConfig().getDouble("event.difficulty-scaling.projectiles.spread-degrees", 10.0)));
+        double spread = Math.toRadians(Math.max(0.0, spreadDegrees));
         double offset = (index - (total - 1) / 2.0) * spread;
         return direction.clone().rotateAroundY(offset).normalize();
     }
@@ -1401,23 +1493,27 @@ final class DragonEventManager implements Listener {
             }
             boolean rewardEligible = !spectators.contains(uuid) && !departedParticipants.contains(uuid);
             if (dealt >= minimum && rewardEligible) {
-                String participationPath = lateParticipants.contains(uuid) ? "rewards.late-participation" : "rewards.participation";
-                runRewardCommands(participationPath, uuid, rank, dealt, players);
-                runDamageTierCommands(uuid, rank, dealt, players);
-                if (eventDeaths.getOrDefault(uuid, 0) == 0) {
-                    runRewardCommands("rewards.no-death", uuid, rank, dealt, players);
+                boolean rankReward = rank >= 1 && rank <= 3
+                        && !plugin.getConfig().getStringList("rewards.rank-" + rank).isEmpty();
+                if (rankReward) {
+                    runRewardCommands("rewards.rank-" + rank, uuid, rank, dealt, players);
+                }
+                boolean rankReplacesOthers = plugin.getConfig().getBoolean(
+                        "rewards.policy.rank-replaces-other-rewards", true);
+                if (!rankReward || !rankReplacesOthers) {
+                    String participationPath = lateParticipants.contains(uuid)
+                            ? "rewards.late-participation" : "rewards.participation";
+                    runRewardCommands(participationPath, uuid, rank, dealt, players);
+                    runDamageTierCommands(uuid, rank, dealt, players);
+                    if (eventDeaths.getOrDefault(uuid, 0) == 0) {
+                        runRewardCommands("rewards.no-death", uuid, rank, dealt, players);
+                    }
                 }
             } else if (online != null && rewardEligible) {
                 messages.send(online, "reward-ineligible", Map.of("minimum", formatDamage(minimum)));
             }
             if (!ranking.isEmpty() && ranking.get(0).getKey().equals(uuid) && result.serverRecord()) {
                 Bukkit.broadcast(messages.get("server-record", Map.of("player", name == null ? uuid.toString() : name, "damage", formatDamage(dealt))));
-            }
-        }
-        for (int i = 0; i < Math.min(3, ranking.size()); i++) {
-            if (ranking.get(i).getValue() >= minimum && !spectators.contains(ranking.get(i).getKey())
-                    && !departedParticipants.contains(ranking.get(i).getKey())) {
-                runRewardCommands("rewards.rank-" + (i + 1), ranking.get(i).getKey(), i + 1, ranking.get(i).getValue(), players);
             }
         }
         runEventEndCommands(players);
@@ -1467,11 +1563,18 @@ final class DragonEventManager implements Listener {
     private void runDamageTierCommands(UUID uuid, int rank, double dealt, String players) {
         ConfigurationSection tiers = plugin.getConfig().getConfigurationSection("rewards.damage-tiers");
         if (tiers == null) return;
-        tiers.getKeys(false).stream().map(key -> {
+        List<Double> reached = tiers.getKeys(false).stream().map(key -> {
             try { return Double.parseDouble(key); }
             catch (NumberFormatException ignored) { return null; }
-        }).filter(java.util.Objects::nonNull).sorted().filter(required -> dealt >= required).forEach(required ->
-                runRewardCommands("rewards.damage-tiers." + formatTierKey(required), uuid, rank, dealt, players));
+        }).filter(java.util.Objects::nonNull).sorted().filter(required -> dealt >= required).toList();
+        if (reached.isEmpty()) return;
+        if (plugin.getConfig().getBoolean("rewards.policy.highest-damage-tier-only", true)) {
+            double highest = reached.get(reached.size() - 1);
+            runRewardCommands("rewards.damage-tiers." + formatTierKey(highest), uuid, rank, dealt, players);
+            return;
+        }
+        reached.forEach(required -> runRewardCommands(
+                "rewards.damage-tiers." + formatTierKey(required), uuid, rank, dealt, players));
     }
 
     private String formatTierKey(double value) {
@@ -1566,6 +1669,9 @@ final class DragonEventManager implements Listener {
         dragonAttackMultiplier = 1.0;
         lastDragonLocation = null;
         dragonStationarySeconds = 0;
+        aprilBarrageTicks = 0;
+        aprilAmbientSoundTicks = 0;
+        lastAprilHurtSoundTick = -1L;
         spawningScaledProjectile = false;
         state = EventState.IDLE;
     }
