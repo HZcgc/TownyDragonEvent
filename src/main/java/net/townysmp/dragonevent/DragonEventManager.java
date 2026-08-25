@@ -407,7 +407,11 @@ final class DragonEventManager implements Listener {
 
     private void teleportToEvent(Player player) {
         if (eventWorld == null || player.getWorld().equals(eventWorld)) return;
-        player.teleportAsync(safeJoinLocation());
+        hideAprilDragonFrom(player);
+        player.teleportAsync(safeJoinLocation()).thenAccept(success -> {
+            if (!success) return;
+            Bukkit.getScheduler().runTask(plugin, () -> hideAprilDragonFrom(player));
+        });
     }
 
     private void beginRespawn() {
@@ -584,6 +588,7 @@ final class DragonEventManager implements Listener {
     private void startAprilFoolsVisual() {
         cancelAprilVisual();
         dragon.setInvisible(true);
+        hideAprilDragonFromEveryone();
         Location spawn = aprilCreeperLocation();
         aprilCreeper = eventWorld.spawn(spawn, Creeper.class, creeper -> {
             creeper.setAI(false);
@@ -612,6 +617,21 @@ final class DragonEventManager implements Listener {
             aprilCreeper.teleport(aprilCreeperLocation());
             aprilCreeper.setVelocity(new Vector());
         }, 1L, 1L);
+    }
+
+    /**
+     * Ender Dragons do not reliably respect Bukkit's invisible metadata on all
+     * 1.21 clients. Hiding the carrier entity for each player keeps its flight
+     * path and boss bar server-side while only the giant Creeper is rendered.
+     */
+    private void hideAprilDragonFrom(Player player) {
+        if (eventMode != EventMode.APRIL_FOOLS || dragon == null || !dragon.isValid()
+                || player == null || !player.isOnline()) return;
+        player.hideEntity(plugin, dragon);
+    }
+
+    private void hideAprilDragonFromEveryone() {
+        for (Player player : Bukkit.getOnlinePlayers()) hideAprilDragonFrom(player);
     }
 
     private Location aprilCreeperLocation() {
@@ -1507,6 +1527,9 @@ final class DragonEventManager implements Listener {
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
+        if (eventMode == EventMode.APRIL_FOOLS && state == EventState.ACTIVE) {
+            Bukkit.getScheduler().runTaskLater(plugin, () -> hideAprilDragonFrom(event.getPlayer()), 1L);
+        }
         if (event.getPlayer().getScoreboardTags().contains("townysmp_dragon_spectator") && state == EventState.IDLE) {
             event.getPlayer().removeScoreboardTag("townysmp_dragon_spectator");
             event.getPlayer().setGameMode(GameMode.SURVIVAL);
@@ -1570,7 +1593,7 @@ final class DragonEventManager implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onVanillaEndPortal(PlayerPortalEvent event) {
         if (eventWorld != null && event.getFrom().getWorld().equals(eventWorld) && state == EventState.FINISHING) {
             event.setCancelled(true);
@@ -1596,6 +1619,20 @@ final class DragonEventManager implements Listener {
         if (!target.getWorld().getName().equals(vanillaEnd)) return;
         event.setCancelled(true);
         messages.send(event.getPlayer(), "end-temporarily-unavailable");
+    }
+
+    /**
+     * A second, late guard prevents portal managers from re-enabling the
+     * arena's sealed End portal after our LOWEST handler cancelled it.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void enforceArenaEndPortalLock(PlayerPortalEvent event) {
+        if (eventWorld == null || !event.getFrom().getWorld().equals(eventWorld)) return;
+        if (state == EventState.FINISHING
+                || (plugin.getConfig().getBoolean("event.lock-exit-until-victory", true)
+                && (state == EventState.JOINING || state == EventState.RESPAWNING || state == EventState.ACTIVE))) {
+            event.setCancelled(true);
+        }
     }
 
     private void returnPlayer(Player player) {
