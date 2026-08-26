@@ -1,38 +1,60 @@
-# EnderDragon
-[![CodeFactor](https://www.codefactor.io/repository/github/ixanadu13/enderdragon/badge)](https://www.codefactor.io/repository/github/ixanadu13/enderdragon)
+# TownyDragonEvent
 
-An easy plugin that can customize your EnderDragon for Minecraft Servers, supports 1.12 and above.
+TownyDragonEvent runs scheduled, isolated Ender Dragon fights for TownySMP on Paper 1.21.11. A pristine End-world template is copied for every event and the disposable runtime world is removed only after all players have left and Paper confirms that it was unloaded.
 
-一个可以自定义末影龙的服务端插件，支持1.12及以上版本。
+## Highlights
 
-**Description:** 
-- https://www.spigotmc.org/resources/enderdragon.101583
+- Vanilla End Crystal respawn sequence in a custom arena
+- Three-hour announcements, five-minute lobby, late joining and a compact final countdown
+- Normal and `/dragon start april_fools` modes
+- Configurable effective boss health above Minecraft's 1024 HP attribute limit
+- Per-player damage, death, crystal and explosion statistics with PlaceholderAPI support
+- Reward commands, damage tiers, rankings, seasons and victory fireworks
+- Five-life spectator system, KeepInventory, safe respawns, void rescue and a world border
+- Configurable arena destruction and optional building lock
+- Crash-safe, serialized template copy/reset lifecycle with validated world paths
+- One controlled asynchronous teleport per player and a reconnect grace period
+- No runtime dependency except Paper; PlaceholderAPI is optional
 
-**Wiki:** 
-- https://ixanadu13.github.io/EnderDragon-Wiki
+## Setup
 
-## bStats
+1. Put the JAR into `plugins/` and restart Paper.
+2. Create or load an End world named `dragonevent_template`.
+3. In that template world, stand at the participant spawn and run `/dragon setspawn`.
+4. Stand on the center of the exit fountain and run `/dragon setportal`.
+5. Stand at the normal server spawn and run `/dragon setexit`.
+6. Run `/dragon start 30` for a short test or `/dragon start` for the configured three-hour schedule.
 
-![bstats](https://bstats.org/signatures/bukkit/Enderdragon.svg)
+The template should remain close to X/Z 0 so the Vanilla Dragon battle and tower regeneration use the intended center. The plugin automatically merges new default keys into existing `config.yml` and `messages.yml` files without replacing configured values.
 
-## Note
+## Commands
 
-Currently, due to limited capacity for maintenance, the project is primarily focused on ensuring compatibility and stability. New features or functionalities will be postponed. While the project runs reliably, the accumulation of minor updates over time has created a need for code refactoring and optimization.
+| Command | Purpose |
+| --- | --- |
+| `/dragon join` | Register or enter an open event |
+| `/dragon leave` | Leave and return to the configured exit |
+| `/dragon status` | Show event state and player counts |
+| `/dragon stats [player]` | Show persistent statistics |
+| `/dragon start [normal\|april_fools] [seconds]` | Start an event |
+| `/dragon stop` | Stop and safely reset an event |
+| `/dragon reload` | Reload config and messages while idle |
+| `/dragon setspawn` | Set the arena arrival point in the template |
+| `/dragon setportal` | Set the fountain center in the template |
+| `/dragon setexit` | Set the destination outside the arena |
+| `/dragon season <name>` | Change the optional statistics season |
 
-> 目前本项目主要关注兼容性和稳定性，新增特性或功能会暂缓。同时，虽然项目已经能够稳定运行，但由于长期的小更新积累，部分代码存在重构和优化的需求。
+## Permissions
 
-To enhance the quality and maintainability of the codebase, we warmly welcome contributions from the community. If you're interested in getting involved, please feel free to submit improvement suggestions or pull requests.
+- `townysmp.dragon.join` — enabled by default
+- `townysmp.dragon.admin` — operator by default
+- `townysmp.dragon.build` — bypasses `event.block-building: false`
 
-> 为了提高代码质量和可维护性，我们非常欢迎社区的贡献与帮助。如果你有兴趣参与，欢迎提交相关的改进建议或代码 PR。
+## Build
 
-Thank you all for your attention and support!
+Requires Java 21:
 
-> 感谢大家的关注和支持！
+```bash
+mvn -B clean package
+```
 
-## DMCA
-
-The JAR files in the `lib` directory have been processed, with their method bodies removed to mitigate infringement risks.
-
-> 已对 `lib` 目录下的 Jar 包进行处理，已移除方法体以避免侵权风险。
-
-[How to obtain the original JAR?](https://www.spigotmc.org/wiki/buildtools/)
+The compiled plugin is written to `target/TownyDragonEvent-0.1.0-build26.jar`.

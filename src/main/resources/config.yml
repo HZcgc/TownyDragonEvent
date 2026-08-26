@@ -49,6 +49,11 @@ world:
   # Prevents clients entering world_the_end while it is briefly saved and
   # cloned. Only applies when template-folder is empty.
   protect-vanilla-portal-during-copy: true
+  reset:
+    # The runtime folder is deleted only after Paper confirms that the world
+    # is empty and unloaded. Failed attempts are retried before reset pauses.
+    maximum-unload-attempts: 40
+    retry-delay-ticks: 10
 event:
   # /dragon start uses this full countdown. /dragon start 30 remains useful for tests.
   countdown-seconds: 10800
@@ -58,6 +63,13 @@ event:
   fight-time-limit-seconds: 900
   minimum-players: 1
   block-building: true
+  # A short network interruption does not immediately remove a fighter. When
+  # they reconnect during this window, they return to the arena automatically.
+  disconnect-grace-seconds: 60
+  player-state:
+    # Prevents Creative/flight advantages and restores both values on exit.
+    force-survival: true
+    disable-flight: true
   difficulty-scaling:
     enabled: true
     # Effective health may exceed Minecraft's real 1024 HP attribute cap. The
@@ -196,6 +208,11 @@ notifications:
     volume: 1.0
     pitch: 0.6
     title: true
+  difficulty:
+    sound: minecraft:block.beacon.power_select
+    volume: 0.5
+    pitch: 1.2
+    title: false
 april-fools:
   # The real Dragon stays invisible and supplies the Vanilla flight path.
   # Damage dealt to this giant Creeper proxy is forwarded to the Dragon.

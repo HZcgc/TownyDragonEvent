@@ -14,9 +14,15 @@ final class WorldFiles {
 
     private WorldFiles() {}
 
-    static void copy(Path source, Path target) throws IOException {
+    static void copy(Path worldContainer, Path source, Path target) throws IOException {
+        requireDirectChild(worldContainer, source, "template");
+        requireDirectChild(worldContainer, target, "runtime");
+        if (source.toAbsolutePath().normalize().equals(target.toAbsolutePath().normalize())) {
+            throw new IOException("Template and runtime world must be different folders");
+        }
         if (!Files.isDirectory(source)) throw new IOException("Template world does not exist: " + source);
-        delete(target);
+        if (Files.isSymbolicLink(source)) throw new IOException("Template world must not be a symbolic link: " + source);
+        delete(worldContainer, target);
         Files.walkFileTree(source, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
@@ -34,8 +40,13 @@ final class WorldFiles {
         });
     }
 
-    static void delete(Path target) throws IOException {
+    static void delete(Path worldContainer, Path target) throws IOException {
+        requireDirectChild(worldContainer, target, "runtime");
         if (!Files.exists(target)) return;
+        if (Files.isSymbolicLink(target)) {
+            Files.delete(target);
+            return;
+        }
         Files.walkFileTree(target, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
@@ -50,5 +61,13 @@ final class WorldFiles {
                 return FileVisitResult.CONTINUE;
             }
         });
+    }
+
+    private static void requireDirectChild(Path worldContainer, Path folder, String label) throws IOException {
+        Path root = worldContainer.toAbsolutePath().normalize();
+        Path candidate = folder.toAbsolutePath().normalize();
+        if (candidate.equals(root) || candidate.getParent() == null || !candidate.getParent().equals(root)) {
+            throw new IOException("Unsafe " + label + " world path outside the world container: " + candidate);
+        }
     }
 }

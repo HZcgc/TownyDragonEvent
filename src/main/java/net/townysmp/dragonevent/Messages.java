@@ -9,6 +9,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -34,6 +35,12 @@ final class Messages {
         if (defaultsStream != null) {
             file.setDefaults(YamlConfiguration.loadConfiguration(new InputStreamReader(
                     defaultsStream, StandardCharsets.UTF_8)));
+            file.options().copyDefaults(true);
+            try {
+                file.save(target);
+            } catch (IOException exception) {
+                plugin.getLogger().warning("Could not write missing defaults to messages.yml: " + exception.getMessage());
+            }
         }
     }
 

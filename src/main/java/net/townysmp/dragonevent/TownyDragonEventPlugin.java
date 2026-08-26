@@ -13,6 +13,8 @@ public final class TownyDragonEventPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        getConfig().options().copyDefaults(true);
+        saveConfig();
         messages = new Messages(this);
         statsManager = new StatsManager(this);
         eventManager = new DragonEventManager(this, messages, statsManager);
@@ -37,6 +39,8 @@ public final class TownyDragonEventPlugin extends JavaPlugin {
 
     void reloadPlugin() {
         reloadConfig();
+        getConfig().options().copyDefaults(true);
+        saveConfig();
         messages.reload();
     }
 }

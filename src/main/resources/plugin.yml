@@ -15,3 +15,6 @@ permissions:
     default: true
   townysmp.dragon.admin:
     default: op
+  townysmp.dragon.build:
+    description: Bypass event.block-building inside the Dragon arena
+    default: op
