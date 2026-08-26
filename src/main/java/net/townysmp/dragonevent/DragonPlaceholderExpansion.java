@@ -1,0 +1,78 @@
+package net.townysmp.dragonevent;
+
+import me.clip.placeholderapi.expansion.PlaceholderExpansion;
+import org.bukkit.OfflinePlayer;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.Locale;
+import java.util.UUID;
+
+final class DragonPlaceholderExpansion extends PlaceholderExpansion {
+    private final TownyDragonEventPlugin plugin;
+    private final DragonEventManager event;
+    private final StatsManager stats;
+
+    DragonPlaceholderExpansion(TownyDragonEventPlugin plugin, DragonEventManager event, StatsManager stats) {
+        this.plugin = plugin;
+        this.event = event;
+        this.stats = stats;
+    }
+
+    @Override public @NotNull String getIdentifier() { return "townydragon"; }
+    @Override public @NotNull String getAuthor() { return "TownySMP"; }
+    @Override public @NotNull String getVersion() { return plugin.getPluginMeta().getVersion(); }
+    @Override public boolean persist() { return true; }
+
+    @Override
+    public @Nullable String onRequest(OfflinePlayer player, @NotNull String parameter) {
+        String key = parameter.toLowerCase(Locale.ROOT);
+        if (key.equals("state")) return event.state().name();
+        if (key.equals("time_remaining")) return event.timeRemaining();
+        if (key.equals("seconds_remaining")) return Integer.toString(event.secondsRemaining());
+        if (key.equals("fight_time_remaining")) return event.fightTimeRemaining();
+        if (key.equals("fight_seconds_remaining")) return Integer.toString(event.fightSecondsRemaining());
+        if (key.equals("closing_time_remaining")) return event.closingTimeRemaining();
+        if (key.equals("closing_seconds_remaining")) return Integer.toString(event.closingSecondsRemaining());
+        if (key.equals("registered_count")) return Integer.toString(event.playerCount());
+        if (key.equals("fighter_count")) return Integer.toString(event.fighterCount());
+        if (key.equals("spectator_count")) return Integer.toString(event.spectatorCount());
+        if (key.equals("season")) return stats.season();
+        if (key.equals("server_record_damage")) return format(stats.serverRecordDamage());
+        if (key.equals("server_record_player")) return stats.serverRecordPlayer();
+        if (player == null) return "";
+        UUID uuid = player.getUniqueId();
+        return switch (key) {
+            case "registered" -> Boolean.toString(event.isRegistered(uuid));
+            case "spectator" -> Boolean.toString(event.isSpectator(uuid));
+            case "departed" -> Boolean.toString(event.hasDeparted(uuid));
+            case "damage" -> format(event.currentDamage(uuid));
+            case "deaths" -> Integer.toString(event.currentDeaths(uuid));
+            case "crystals" -> Integer.toString(event.currentCrystals(uuid));
+            case "explosions" -> Integer.toString(event.currentExplosions(uuid));
+            case "rank" -> Integer.toString(event.currentRank(uuid));
+            case "total_damage" -> format(stats.totalDamage(uuid));
+            case "last_damage" -> format(stats.lastDamage(uuid));
+            case "participations" -> Integer.toString(stats.participations(uuid));
+            case "wins" -> Integer.toString(stats.wins(uuid));
+            case "best_rank" -> Integer.toString(stats.bestRank(uuid));
+            case "personal_best" -> format(stats.personalBest(uuid));
+            case "total_deaths" -> Integer.toString(stats.deaths(uuid));
+            case "total_crystals" -> Integer.toString(stats.crystals(uuid));
+            case "total_explosions" -> Integer.toString(stats.explosions(uuid));
+            case "last_crystals" -> Integer.toString(stats.lastCrystals(uuid));
+            case "last_explosions" -> Integer.toString(stats.lastExplosions(uuid));
+            case "season_damage" -> format(stats.seasonDamage(uuid));
+            case "season_participations" -> Integer.toString(stats.seasonParticipations(uuid));
+            case "season_wins" -> Integer.toString(stats.seasonWins(uuid));
+            case "season_best_rank" -> Integer.toString(stats.seasonBestRank(uuid));
+            case "season_personal_best" -> format(stats.seasonPersonalBest(uuid));
+            case "season_deaths" -> Integer.toString(stats.seasonDeaths(uuid));
+            case "season_crystals" -> Integer.toString(stats.seasonCrystals(uuid));
+            case "season_explosions" -> Integer.toString(stats.seasonExplosions(uuid));
+            default -> null;
+        };
+    }
+
+    private String format(double value) { return String.format(Locale.US, "%.2f", value); }
+}

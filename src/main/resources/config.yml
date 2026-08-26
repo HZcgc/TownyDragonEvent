@@ -1,102 +1,327 @@
-#You don't need to edit it.
-version: 2.3.0
+config-version: 3
 
-#Enabled: 'Chinese','English'
-lang: 'English'
-
-#Enabled: 'Disable','ChatBox','SubTitle','ActionBar'
-damage_visible_mode: ActionBar
-
-damage_statistics:
-  # Display how many player at most
-  limit: 10
-
-#Enabled: 'weight','pc' ('edge' is deprecated!)
-#'weight'(edge): means using weight to decide which dragon(including default dragon) to spawn.
-#'pc': namely 'priority+chance', dragons(except the default one) will be sorted in descending order of priority, and plugin will sequently try to spawn each dragon(according to respective chance). Once succeed, it will spawn and dragons behind it will be skipped. If all attempts fail, spawn the default one.
-special_dragon_jude_mode: 'weight'
-
-#format: '<NAME>:<WEIGHT>'   (<NAME> -> file name; <WEIGHT> -> positive integer)
-# For example, if you want to add a new dragon,
-# you can create a new file named '<NAME>.yml' in plugins/EnderDragon/setting,
-# and then add - '<NAME>:<WEIGHT>' here
-dragon_setting_file:
-  - 'default:5'
-  - 'special:5'
-
-auto_respawn:
-  # You can add more entries without duplicate name according to the format.
-  task1:
-    enable: false
-    world_name: world_the_end
-    #some examples:
-    # minute:30            -> respawn every 30 minutes
-    # hour:4               -> respawn every 4 hours
-    # day:1,00:00          -> respawn at 00:00 every day
-    # day:10,14:30         -> respawn at 14:30 every 10 days
-    # week:6,22:00         -> respawn at 22:00 every Saturday(the 6th day of one week)
-    # week:7,09:00         -> respawn at 09:00 every Sunday
-    # month:8,11:43        -> respawn at 11:43,the 8th day every month
-    # year:200,00:00       -> respawn at 00:00,the 200th day every year
-    respawn_time: 'day:10,22:00'
-  task_2:
-    enable: false
-    world_name: world_the_end
-    respawn_time: 'week:7,20:00'
-
-
-
-#"respawn_cd" works as accurate countdown, and have an independent system.
-#The configuration can be modified with command "/ed respawn_cd".
-#"auto_respawn.invulnerable" has same effect on this.
-respawn_cd:
-  enable: true
-
-#if set this to true, player(in survival mode) can't break the end_crystal after auto_respawn starts
-crystal_invulnerable: false
-#if set this to true, end_crystal can still be crafted or placed,but end_crystal that placed by player cannot respawn the ender_dragon
-resist_player_respawn: false
-#if set this to true, player cannot gather dragon_breath with glass_bottle
-resist_dragon_breath_gather: false
-#The gui that will be shown when using "/ed drop gui"
-main_gui: main
-
-#The spawn of ender_dragon in these worlds will be ignored by this plugin.
-blacklist_worlds:
-  - 'world'
-  - 'world_nether'
-
-# Ender_dragon spawns with these reasons will be ignored by this plugin.
-# common options: COMMAND(spawn with /summon), CUSTOM(generate by other plugins), DEFAULT(by nature, including end_crystal)
-# You can find all spawn reasons here:
-# https://hub.spigotmc.org/javadocs/bukkit/org/bukkit/event/entity/CreatureSpawnEvent.SpawnReason.html
-# example: [COMMAND,CUSTOM]
-blacklist_spawn_reason: []
-
-#optional: [default/nbt(<=1.20.4)/advanced(<=1.20.4)]
-item_format:
-  reward: default
-
-#Whether hook to other plugins
-hook_plugins:
-  MythicLib: true
-
-#Whether enable script expansion
-#Due to dependency loading, this configuration change will only take effect after reloading the server
-expansion:
-  groovy: false
-
-#[true/false]
-debug: false
-
-#Do not modify the configuration below unless you know what you are doing
-advanced_setting:
-  # In some mohist-server, environment of world may be loaded incorrectly, which affects the respawn function.
-  # You can set this to "true" and reload server to fix it.
-  world_env_fix: false
-  save_respawn_status: false
-  save_bossbar: false
-  # to-do
-  # can_spawn_not_the_end: false
-  backslash_split:
-    reward: false
+world:
+  # Both folders are relative to the server world-container.
+  # Optional manual override. Leave this empty and the plugin automatically
+  # uses a loaded world or world folder named by auto-template-name. If that
+  # world does not exist, vanilla-end-folder is used instead.
+  template-folder: ''
+  auto-template-name: dragonevent_template
+  vanilla-end-folder: world_the_end
+  # Must be a dedicated disposable folder. The plugin refuses to replace or
+  # delete an existing folder unless it carries its own ownership marker.
+  runtime-name: dragonevent_end
+  # Hides player direction markers during the event by default.
+  locator-bar-enabled: false
+  # Load the custom template world, stand where participants should arrive,
+  # and run /dragon setspawn. Only the coordinates are stored, so the same
+  # point is used inside every disposable runtime copy.
+  join-location: { x: 0.5, y: 65.0, z: 18.5, yaw: 180.0, pitch: 0.0 }
+  # Stand on the center fountain pillar and run /dragon setportal. The command
+  # detects nearby active portal blocks or the four-block Vanilla pillar and
+  # stores the portal plane. Vanilla Dragon AI and tower regeneration require
+  # the arena and fountain to remain close to X/Z 0.
+  portal-location:
+    set: false
+    x: 0
+    y: 64
+    z: 0
+  # Set this in-game while standing at the server spawn: /dragon setexit
+  # While unset, the spawn point of the first loaded overworld is used.
+  exit-location:
+    world: ''
+    x: 0.0
+    y: 64.0
+    z: 0.0
+    yaw: 0.0
+    pitch: 0.0
+  spectator-location: { x: 0.5, y: 100.0, z: 0.5, yaw: 0.0, pitch: 45.0 }
+  spectator-boundary:
+    min-y: 0.0
+    max-y: 220.0
+    # Reasserts spectator flight and checks the position four times per second.
+    check-interval-ticks: 5
+  border:
+    enabled: true
+    # When a portal point was set, use it as the arena border center.
+    center-on-portal: true
+    center-x: 0.0
+    center-z: 0.0
+    # Diameter in blocks. A separate guard teleports spectators back inside.
+    size: 512.0
+    warning-distance: 16
+  # Prevents clients entering world_the_end while it is briefly saved and
+  # cloned. Only applies when template-folder is empty.
+  protect-vanilla-portal-during-copy: true
+  reset:
+    # The runtime folder is deleted only after Paper confirms that the world
+    # is empty and unloaded. Failed attempts are retried before reset pauses.
+    maximum-unload-attempts: 40
+    retry-delay-ticks: 10
+event:
+  # /dragon start uses this full countdown. /dragon start 30 remains useful for tests.
+  countdown-seconds: 10800
+  join-seconds: 300
+  finish-delay-seconds: 120
+  # A solo event starts considerably below the previous 1000 HP. Additional
+  # fighters add more health so groups cannot melt the boss immediately.
+  dragon-health: 500.0
+  fight-time-limit-seconds: 900
+  minimum-players: 1
+  block-building: true
+  # A short network interruption does not immediately remove a fighter. When
+  # they reconnect during this window, they return to the arena automatically.
+  disconnect-grace-seconds: 60
+  player-state:
+    # Prevents Creative/flight advantages and restores both values on exit.
+    force-survival: true
+    disable-flight: true
+  difficulty-scaling:
+    enabled: true
+    # Effective health may exceed Minecraft's real 1024 HP attribute cap. The
+    # plugin converts the excess into incoming damage reduction.
+    health-per-additional-fighter: 250.0
+    maximum-effective-health: 6000.0
+    attack-multiplier-per-additional-fighter: 0.05
+    maximum-attack-multiplier: 2.0
+    projectiles:
+      # At 8/16 additional active fighters the Dragon fires 2/3 projectiles.
+      additional-every-fighters: 8
+      maximum-per-volley: 3
+      spread-degrees: 10.0
+  arena-destruction:
+    # The runtime arena is disposable, so players, TNT, beds, respawn anchors,
+    # April Fools projectiles and the Dragon may tear it apart during combat.
+    # The template world remains untouched and restores the arena next event.
+    enabled: true
+    dragon-griefing: true
+    # Re-enables explosion block damage if a protection plugin cancelled it.
+    # This only applies inside dragonevent_end while the fight is ACTIVE.
+    force-explosions: true
+    limits:
+      # Zero disables the corresponding limiter.
+      maximum-primed-tnt: 50
+      maximum-april-projectiles: 40
+    explosion-power:
+      player-tnt: 4.0
+      april-tnt: 5.0
+      april-fireball: 3.0
+  safe-respawn:
+    enabled: true
+    # Rebuilt only when the configured arrival point has lost its floor.
+    platform-radius: 2
+    platform-material: OBSIDIAN
+  safe-exit:
+    # Recreates the Vanilla fountain at the configured portal point after the
+    # fight, then fills holes below its surrounding platform with Bedrock.
+    rebuild-vanilla-portal: true
+    platform:
+      enabled: true
+      # Extends five blocks farther on every side than the old radius of 4.
+      radius: 9
+  dragon-watchdog:
+    enabled: true
+    minimum-y: -20.0
+    maximum-y: 300.0
+    minimum-movement-blocks: 2.0
+    maximum-stationary-seconds: 25
+    rescue-height-offset: 70.0
+  fight-actionbar:
+    enabled: true
+  # Players below this damage receive no participation or damage-tier rewards.
+  minimum-reward-damage: 25.0
+  # Removes the event world's exit portal until the Dragon is defeated.
+  lock-exit-until-victory: true
+  death:
+    keep-inventory: true
+    immediate-respawn: true
+    respawn-protection-seconds: 5
+    slow-falling-seconds: 8
+    spectator-after-deaths: 5
+    # Console commands on every normal arena respawn. Useful for food/arrows.
+    respawn-commands: []
+  void-rescue:
+    enabled: true
+    trigger-y: -10.0
+    cooldown-seconds: 10
+    slow-falling-seconds: 8
+  # Calm registration reminders. Players can use /dragon join from the first
+  # announcement onward; they are teleported when the 5-minute lobby opens.
+  announcement-seconds:
+    - 10800
+    - 7200
+    - 3600
+    - 1800
+    - 900
+    - 600
+    - 300
+  last-chance-seconds: 180
+  # Short final countdown. It ends directly with the four End Crystals.
+  final-countdown-seconds:
+    - 30
+    - 15
+    - 10
+    - 5
+    - 4
+    - 3
+    - 2
+    - 1
+notifications:
+  announcement:
+    sound: minecraft:entity.ender_dragon.ambient
+    volume: 0.35
+    pitch: 0.9
+    title: false
+  last-chance:
+    sound: minecraft:entity.ender_dragon.growl
+    volume: 0.55
+    pitch: 0.85
+    title: false
+  countdown:
+    sound: minecraft:block.note_block.pling
+    volume: 0.45
+    pitch: 0.8
+    title: false
+    fade-in-ticks: 10
+    stay-ticks: 40
+    fade-out-ticks: 10
+  lobby:
+    sound: minecraft:block.end_portal.spawn
+    volume: 0.8
+    pitch: 1.0
+    title: true
+  respawn:
+    sound: minecraft:entity.ender_dragon.growl
+    volume: 1.0
+    pitch: 0.7
+    title: true
+  fight:
+    sound: minecraft:entity.ender_dragon.growl
+    volume: 1.0
+    pitch: 1.0
+    title: true
+  april-fight:
+    sounds:
+      - minecraft:entity.creeper.primed;1.0;0.7
+      - minecraft:entity.ghast.scream;0.8;1.2
+    title: true
+  victory:
+    sound: minecraft:ui.toast.challenge_complete
+    volume: 1.0
+    pitch: 1.0
+    title: true
+  defeat:
+    sound: minecraft:entity.ender_dragon.growl
+    volume: 1.0
+    pitch: 0.6
+    title: true
+  difficulty:
+    sound: minecraft:block.beacon.power_select
+    volume: 0.5
+    pitch: 1.2
+    title: false
+april-fools:
+  # The real Dragon stays invisible and supplies the Vanilla flight path.
+  # Damage dealt to this giant Creeper proxy is forwarded to the Dragon.
+  # Applied after normal player scaling. This keeps the explosive joke mode
+  # at no more than half of the equivalent normal event's effective health.
+  health-multiplier: 0.5
+  creeper-scale: 6.0
+  vertical-offset: -4.0
+  carrier:
+    # Own April projectiles cannot damage or knock the hidden carrier Dragon.
+    # The watchdog also returns it to a reachable height if another explosion
+    # or plugin still manages to push it too far above the arena.
+    maximum-height-above-portal: 65.0
+    rescue-height-above-portal: 45.0
+  projectiles:
+    # Every Dragon fireball becomes several flying TNT/Ghast projectiles.
+    tnt-chance: 0.5
+    speed: 1.1
+    tnt-fuse-ticks: 45
+    fireball-yield: 2.0
+    dragon-shot-multiplier: 3
+    maximum-per-dragon-shot: 9
+    # Gives fighters a safe melee window while the Creeper is approaching,
+    # sitting on or still directly above the exit fountain.
+    portal-cease-fire:
+      enabled: true
+      radius: 18.0
+      maximum-height-above-portal: 16.0
+    # Gives the Creeper its own attacks even while the carrier Dragon is not
+    # using Dragon Breath. 50 ticks = one barrage every 2.5 seconds.
+    automatic-barrage:
+      enabled: true
+      interval-ticks: 50
+      projectiles: 4
+      spread-degrees: 18.0
+  sounds:
+    enabled: true
+    # Disabled by default: the repeated Creeper hurt/ambient noises are very
+    # harsh at boss scale. TNT fuses and Ghast fireballs remain audible.
+    creeper-voice-enabled: false
+    # Plays boss sounds directly to everyone inside the arena, so distance
+    # from the flying Creeper cannot make it inaudible.
+    global-to-arena: true
+    ambient:
+      sound: minecraft:entity.creeper.hurt
+      interval-ticks: 80
+      volume: 1.8
+      pitch: 0.55
+    attack:
+      sound: minecraft:entity.creeper.primed
+      volume: 2.4
+      pitch: 0.65
+    hurt:
+      sound: minecraft:entity.creeper.hurt
+      cooldown-ticks: 6
+      volume: 1.6
+      pitch: 0.75
+  finale:
+    enabled: true
+    mini-creepers: 10
+    mini-creeper-scale: 0.45
+    mini-fuse-ticks: 40
+    fireworks: 6
+victory-fireworks:
+  enabled: true
+  waves: 4
+  fireworks-per-wave: 5
+  interval-ticks: 12
+  power: 1
+rewards:
+  # Per-player variables: {player}, {uuid}, {damage}, {rank}, {crystals},
+  # {explosions}, {players}, {player_count}
+  policy:
+    # Top-three prizes are exclusive by default. A winner therefore receives
+    # only rank-1 instead of rank-1 + participation + no-death + damage tiers.
+    rank-replaces-other-rewards: true
+    # Non-ranked players receive only their highest reached damage tier.
+    highest-damage-tier-only: true
+  participation:
+    - eco give {player} 500
+  # Used instead of participation when joining after crystal summoning began.
+  late-participation:
+    - eco give {player} 250
+  no-death:
+    - eco give {player} 500
+  rank-1:
+    - eco give {player} 5000
+  rank-2:
+    - eco give {player} 3000
+  rank-3:
+    - eco give {player} 2000
+  # Executed once after the ranking. Useful for broadcasts and integrations.
+  event-end: []
+  # By default only the highest reached tier is executed. Keys are required
+  # Dragon damage; set policy.highest-damage-tier-only to false to stack them.
+  damage-tiers:
+    '100':
+      - eco give {player} 250
+    '250':
+      - eco give {player} 500
+    '500':
+      - eco give {player} 1000
+statistics:
+  # Change with /dragon season <name>. Old seasons remain in stats.yml.
+  season: season-1
