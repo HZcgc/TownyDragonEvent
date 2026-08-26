@@ -36,6 +36,7 @@ fight-actionbar: '<red><bold>{fighters}</bold> fighters</red> <dark_gray>•</da
 dragon-watchdog-rescue: '<yellow>The Dragon tore through reality and was pulled back above the arena.</yellow>'
 crystal-protected: '<red>The summoning crystals cannot be destroyed.</red>'
 block-building-disabled: '<red>Building is disabled inside the Dragon arena.</red>'
+arena-private: '<red>The Dragon arena is private.</red> <gray>Join the event with <yellow>/dragon join</yellow>.</gray>'
 difficulty-updated: '<yellow><bold>DRAGON</bold></yellow> <dark_gray>»</dark_gray> <gray>A late fighter joined. Difficulty adjusted to <red>{health} effective HP</red> for <yellow>{fighters} fighters</yellow>.</gray>'
 difficulty-title: '<yellow><bold>REINFORCEMENTS</bold></yellow>'
 difficulty-subtitle: '<gray>{fighters} fighters <dark_gray>•</dark_gray> <red>{health} HP</red></gray>'

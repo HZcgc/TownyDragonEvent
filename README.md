@@ -12,7 +12,7 @@ TownyDragonEvent runs scheduled, isolated Ender Dragon fights for TownySMP on Pa
 - Reward commands, damage tiers, rankings, seasons and victory fireworks
 - Five-life spectator system, KeepInventory, safe respawns, void rescue and a world border
 - Configurable arena destruction and optional building lock
-- Crash-safe, serialized template copy/reset lifecycle with validated world paths
+- Crash-safe, serialized template copy/reset lifecycle with validated paths and an ownership marker
 - One controlled asynchronous teleport per player and a reconnect grace period
 - No runtime dependency except Paper; PlaceholderAPI is optional
 

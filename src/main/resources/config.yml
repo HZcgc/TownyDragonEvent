@@ -6,6 +6,8 @@ world:
   template-folder: ''
   auto-template-name: dragonevent_template
   vanilla-end-folder: world_the_end
+  # Must be a dedicated disposable folder. The plugin refuses to replace or
+  # delete an existing folder unless it carries its own ownership marker.
   runtime-name: dragonevent_end
   # Hides player direction markers during the event by default.
   locator-bar-enabled: false

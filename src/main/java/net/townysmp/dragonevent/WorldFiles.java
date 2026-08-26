@@ -10,7 +10,8 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Set;
 
 final class WorldFiles {
-    private static final Set<String> SKIP = Set.of("uid.dat", "session.lock");
+    private static final String OWNERSHIP_MARKER = ".townysmp-dragon-runtime";
+    private static final Set<String> SKIP = Set.of("uid.dat", "session.lock", OWNERSHIP_MARKER);
 
     private WorldFiles() {}
 
@@ -22,7 +23,14 @@ final class WorldFiles {
         }
         if (!Files.isDirectory(source)) throw new IOException("Template world does not exist: " + source);
         if (Files.isSymbolicLink(source)) throw new IOException("Template world must not be a symbolic link: " + source);
-        delete(worldContainer, target);
+        if (Files.exists(target)) {
+            if (!isOwnedRuntime(worldContainer, target)) {
+                throw new IOException("Runtime target already exists but is not owned by TownyDragonEvent: " + target);
+            }
+            delete(worldContainer, target);
+        }
+        Files.createDirectories(target);
+        Files.writeString(target.resolve(OWNERSHIP_MARKER), "TownyDragonEvent disposable runtime world\n");
         Files.walkFileTree(source, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
@@ -43,9 +51,8 @@ final class WorldFiles {
     static void delete(Path worldContainer, Path target) throws IOException {
         requireDirectChild(worldContainer, target, "runtime");
         if (!Files.exists(target)) return;
-        if (Files.isSymbolicLink(target)) {
-            Files.delete(target);
-            return;
+        if (!isOwnedRuntime(worldContainer, target)) {
+            throw new IOException("Refusing to delete a runtime folder without the ownership marker: " + target);
         }
         Files.walkFileTree(target, new SimpleFileVisitor<>() {
             @Override
@@ -61,6 +68,12 @@ final class WorldFiles {
                 return FileVisitResult.CONTINUE;
             }
         });
+    }
+
+    static boolean isOwnedRuntime(Path worldContainer, Path target) throws IOException {
+        requireDirectChild(worldContainer, target, "runtime");
+        return Files.isDirectory(target) && !Files.isSymbolicLink(target)
+                && Files.isRegularFile(target.resolve(OWNERSHIP_MARKER));
     }
 
     private static void requireDirectChild(Path worldContainer, Path folder, String label) throws IOException {
