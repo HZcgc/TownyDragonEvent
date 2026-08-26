@@ -1,4 +1,4 @@
-config-version: 2
+config-version: 3
 
 world:
   # Both folders are relative to the server world-container.
@@ -117,7 +117,8 @@ event:
     rebuild-vanilla-portal: true
     platform:
       enabled: true
-      radius: 4
+      # Extends five blocks farther on every side than the old radius of 4.
+      radius: 9
   dragon-watchdog:
     enabled: true
     minimum-y: -20.0
@@ -241,6 +242,12 @@ april-fools:
     fireball-yield: 2.0
     dragon-shot-multiplier: 3
     maximum-per-dragon-shot: 9
+    # Gives fighters a safe melee window while the Creeper is approaching,
+    # sitting on or still directly above the exit fountain.
+    portal-cease-fire:
+      enabled: true
+      radius: 18.0
+      maximum-height-above-portal: 16.0
     # Gives the Creeper its own attacks even while the carrier Dragon is not
     # using Dragon Breath. 50 ticks = one barrage every 2.5 seconds.
     automatic-barrage:

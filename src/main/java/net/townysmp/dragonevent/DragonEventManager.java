@@ -819,6 +819,10 @@ final class DragonEventManager implements Listener {
                 playAprilSound("april-fools.sounds.ambient", "minecraft:entity.creeper.hurt", 1.8f, 0.55f);
             }
         }
+        if (aprilProjectilesPausedAtPortal()) {
+            aprilBarrageTicks = 0;
+            return;
+        }
         if (!plugin.getConfig().getBoolean("april-fools.projectiles.automatic-barrage.enabled", true)) return;
         int barrageInterval = Math.max(10,
                 plugin.getConfig().getInt("april-fools.projectiles.automatic-barrage.interval-ticks", 50));
@@ -829,7 +833,8 @@ final class DragonEventManager implements Listener {
     }
 
     private void launchAprilBarrage() {
-        if (eventWorld == null || aprilCreeper == null || !aprilCreeper.isValid()) return;
+        if (eventWorld == null || aprilCreeper == null || !aprilCreeper.isValid()
+                || aprilProjectilesPausedAtPortal()) return;
         List<Player> targets = participants.stream()
                 .filter(uuid -> !spectators.contains(uuid) && !departedParticipants.contains(uuid))
                 .map(Bukkit::getPlayer)
@@ -1014,6 +1019,10 @@ final class DragonEventManager implements Listener {
     public void onDragonProjectile(ProjectileLaunchEvent event) {
         if (spawningScaledProjectile || state != EventState.ACTIVE
                 || !(event.getEntity() instanceof DragonFireball fireball) || fireball.getShooter() != dragon) return;
+        if (eventMode == EventMode.APRIL_FOOLS && aprilProjectilesPausedAtPortal()) {
+            event.setCancelled(true);
+            return;
+        }
         Location source = fireball.getLocation().clone();
         Vector direction = fireball.getVelocity().clone();
         if (direction.lengthSquared() < 0.01) direction = dragon.getLocation().getDirection();
@@ -1086,7 +1095,8 @@ final class DragonEventManager implements Listener {
     }
 
     private void launchAprilProjectile(Location source, Vector direction) {
-        if (eventMode != EventMode.APRIL_FOOLS || state != EventState.ACTIVE || eventWorld == null) return;
+        if (eventMode != EventMode.APRIL_FOOLS || state != EventState.ACTIVE || eventWorld == null
+                || aprilProjectilesPausedAtPortal()) return;
         double speed = Math.max(0.2, plugin.getConfig().getDouble("april-fools.projectiles.speed", 1.1));
         double tntChance = Math.max(0.0, Math.min(1.0,
                 plugin.getConfig().getDouble("april-fools.projectiles.tnt-chance", 0.5)));
@@ -1306,6 +1316,32 @@ final class DragonEventManager implements Listener {
         return phase.equals("LAND_ON_PORTAL") || phase.equals("BREATH_ATTACK")
                 || phase.equals("SEARCH_FOR_BREATH_ATTACK_TARGET") || phase.equals("ROAR_BEFORE_ATTACK")
                 || phase.equals("DYING");
+    }
+
+    private boolean aprilProjectilesPausedAtPortal() {
+        if (eventMode != EventMode.APRIL_FOOLS || dragon == null || !dragon.isValid()
+                || eventWorld == null
+                || !plugin.getConfig().getBoolean(
+                "april-fools.projectiles.portal-cease-fire.enabled", true)) return false;
+        String phase = dragon.getPhase().name();
+        if (phase.equals("FLY_TO_PORTAL") || phase.equals("LAND_ON_PORTAL")
+                || phase.equals("BREATH_ATTACK") || phase.equals("SEARCH_FOR_BREATH_ATTACK_TARGET")
+                || phase.equals("ROAR_BEFORE_ATTACK") || phase.equals("DYING")) return true;
+
+        Location center = portalLocation(eventWorld.getEnderDragonBattle());
+        if (center == null) return false;
+        Location current = dragon.getLocation();
+        double radius = Math.max(4.0, Math.min(48.0,
+                plugin.getConfig().getDouble(
+                        "april-fools.projectiles.portal-cease-fire.radius", 18.0)));
+        double maximumHeight = Math.max(4.0, Math.min(64.0,
+                plugin.getConfig().getDouble(
+                        "april-fools.projectiles.portal-cease-fire.maximum-height-above-portal", 16.0)));
+        double deltaX = current.getX() - center.getX();
+        double deltaZ = current.getZ() - center.getZ();
+        return deltaX * deltaX + deltaZ * deltaZ <= radius * radius
+                && current.getY() >= center.getY() - 8.0
+                && current.getY() <= center.getY() + maximumHeight;
     }
 
     private Location dragonRescueLocation() {
@@ -2476,7 +2512,7 @@ final class DragonEventManager implements Listener {
         openExitPortal();
         if (center == null || !plugin.getConfig().getBoolean("event.safe-exit.platform.enabled", true)) return;
         int radius = Math.max(2, Math.min(12,
-                plugin.getConfig().getInt("event.safe-exit.platform.radius", 4)));
+                plugin.getConfig().getInt("event.safe-exit.platform.radius", 9)));
         int floorY = center.getBlockY() - 1;
         for (int x = -radius; x <= radius; x++) {
             for (int z = -radius; z <= radius; z++) {
