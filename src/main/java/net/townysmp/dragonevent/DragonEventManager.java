@@ -509,7 +509,7 @@ final class DragonEventManager implements Listener {
             }
             hideAprilDragonFrom(player);
             if (state == EventState.ACTIVE) rescaleDifficultyForLateFighters();
-        });
+        }));
     }
 
     private void prepareParticipantForArena(Player player) {
