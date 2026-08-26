@@ -8,6 +8,7 @@ TownyDragonEvent runs scheduled, isolated Ender Dragon fights for TownySMP on Pa
 - Three-hour announcements, five-minute lobby, late joining and a compact final countdown
 - Normal and `/dragon start april_fools` modes
 - April Fools portal cease-fire for a fair melee damage window
+- Expanded post-fight safety platform around the exit fountain
 - Group-scaled effective boss health above Minecraft's 1024 HP attribute limit
 - Separate April Fools health multiplier (50% of the equivalent normal fight by default)
 - Per-player damage, death, crystal and explosion statistics with PlaceholderAPI support
