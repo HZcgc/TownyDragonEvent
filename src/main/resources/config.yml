@@ -1,3 +1,5 @@
+config-version: 2
+
 world:
   # Both folders are relative to the server world-container.
   # Optional manual override. Leave this empty and the plugin automatically
@@ -61,7 +63,9 @@ event:
   countdown-seconds: 10800
   join-seconds: 300
   finish-delay-seconds: 120
-  dragon-health: 1000.0
+  # A solo event starts considerably below the previous 1000 HP. Additional
+  # fighters add more health so groups cannot melt the boss immediately.
+  dragon-health: 500.0
   fight-time-limit-seconds: 900
   minimum-players: 1
   block-building: true
@@ -76,8 +80,8 @@ event:
     enabled: true
     # Effective health may exceed Minecraft's real 1024 HP attribute cap. The
     # plugin converts the excess into incoming damage reduction.
-    health-per-additional-fighter: 125.0
-    maximum-effective-health: 5000.0
+    health-per-additional-fighter: 250.0
+    maximum-effective-health: 6000.0
     attack-multiplier-per-additional-fighter: 0.05
     maximum-attack-multiplier: 2.0
     projectiles:
@@ -218,6 +222,9 @@ notifications:
 april-fools:
   # The real Dragon stays invisible and supplies the Vanilla flight path.
   # Damage dealt to this giant Creeper proxy is forwarded to the Dragon.
+  # Applied after normal player scaling. This keeps the explosive joke mode
+  # at no more than half of the equivalent normal event's effective health.
+  health-multiplier: 0.5
   creeper-scale: 6.0
   vertical-offset: -4.0
   carrier:

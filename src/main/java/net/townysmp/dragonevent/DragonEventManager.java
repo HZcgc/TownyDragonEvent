@@ -699,20 +699,22 @@ final class DragonEventManager implements Listener {
     }
 
     private double configureDifficulty(int fighterCount) {
-        double baseHealth = Math.max(1.0, plugin.getConfig().getDouble("event.dragon-health", 1000.0));
+        double baseHealth = Math.max(1.0, plugin.getConfig().getDouble("event.dragon-health", 500.0));
         int fighters = Math.max(1, fighterCount);
         if (!plugin.getConfig().getBoolean("event.difficulty-scaling.enabled", true)) {
-            effectiveDragonHealth = baseHealth;
+            effectiveDragonHealth = Math.max(1.0, baseHealth * modeHealthMultiplier());
             double physicalHealth = Math.min(1024.0, effectiveDragonHealth);
             incomingDamageMultiplier = Math.min(1.0, physicalHealth / effectiveDragonHealth);
             dragonAttackMultiplier = 1.0;
             return physicalHealth;
         }
         double healthPerFighter = Math.max(0.0,
-                plugin.getConfig().getDouble("event.difficulty-scaling.health-per-additional-fighter", 125.0));
+                plugin.getConfig().getDouble("event.difficulty-scaling.health-per-additional-fighter", 250.0));
         double maximumEffective = Math.max(baseHealth,
-                plugin.getConfig().getDouble("event.difficulty-scaling.maximum-effective-health", 5000.0));
-        effectiveDragonHealth = Math.min(maximumEffective, baseHealth + Math.max(0, fighters - 1) * healthPerFighter);
+                plugin.getConfig().getDouble("event.difficulty-scaling.maximum-effective-health", 6000.0));
+        double normalModeHealth = Math.min(maximumEffective,
+                baseHealth + Math.max(0, fighters - 1) * healthPerFighter);
+        effectiveDragonHealth = Math.max(1.0, normalModeHealth * modeHealthMultiplier());
         double physicalHealth = Math.min(1024.0, effectiveDragonHealth);
         incomingDamageMultiplier = Math.min(1.0, physicalHealth / effectiveDragonHealth);
         double attackPerFighter = Math.max(0.0,
@@ -721,6 +723,12 @@ final class DragonEventManager implements Listener {
                 plugin.getConfig().getDouble("event.difficulty-scaling.maximum-attack-multiplier", 2.0));
         dragonAttackMultiplier = Math.min(maximumAttack, 1.0 + Math.max(0, fighters - 1) * attackPerFighter);
         return physicalHealth;
+    }
+
+    private double modeHealthMultiplier() {
+        if (eventMode != EventMode.APRIL_FOOLS) return 1.0;
+        return Math.max(0.05, Math.min(1.0,
+                plugin.getConfig().getDouble("april-fools.health-multiplier", 0.5)));
     }
 
     private void rescaleDifficultyForLateFighters() {

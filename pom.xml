@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.townysmp</groupId>
   <artifactId>TownyDragonEvent</artifactId>
-  <version>0.1.0-build26</version>
+  <version>0.1.0-build27</version>
   <name>TownyDragonEvent</name>
   <properties>
     <maven.compiler.release>21</maven.compiler.release>

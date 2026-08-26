@@ -7,7 +7,8 @@ TownyDragonEvent runs scheduled, isolated Ender Dragon fights for TownySMP on Pa
 - Vanilla End Crystal respawn sequence in a custom arena
 - Three-hour announcements, five-minute lobby, late joining and a compact final countdown
 - Normal and `/dragon start april_fools` modes
-- Configurable effective boss health above Minecraft's 1024 HP attribute limit
+- Group-scaled effective boss health above Minecraft's 1024 HP attribute limit
+- Separate April Fools health multiplier (50% of the equivalent normal fight by default)
 - Per-player damage, death, crystal and explosion statistics with PlaceholderAPI support
 - Reward commands, damage tiers, rankings, seasons and victory fireworks
 - Five-life spectator system, KeepInventory, safe respawns, void rescue and a world border
@@ -57,4 +58,4 @@ Requires Java 21:
 mvn -B clean package
 ```
 
-The compiled plugin is written to `target/TownyDragonEvent-0.1.0-build26.jar`.
+The compiled plugin is written to `target/TownyDragonEvent-0.1.0-build27.jar`.

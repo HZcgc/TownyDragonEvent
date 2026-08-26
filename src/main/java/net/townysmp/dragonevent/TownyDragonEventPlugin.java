@@ -13,6 +13,7 @@ public final class TownyDragonEventPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        migrateConfig();
         getConfig().options().copyDefaults(true);
         saveConfig();
         messages = new Messages(this);
@@ -39,8 +40,35 @@ public final class TownyDragonEventPlugin extends JavaPlugin {
 
     void reloadPlugin() {
         reloadConfig();
+        migrateConfig();
         getConfig().options().copyDefaults(true);
         saveConfig();
         messages.reload();
+    }
+
+    private void migrateConfig() {
+        int version = getConfig().contains("config-version", true)
+                ? getConfig().getInt("config-version", 0) : 0;
+        if (version >= 2) return;
+
+        // Only replace the exact Build 26 defaults. Deliberately customised
+        // installations keep their configured values.
+        if (approximately(getConfig().getDouble("event.dragon-health", 1000.0), 1000.0)) {
+            getConfig().set("event.dragon-health", 500.0);
+        }
+        if (approximately(getConfig().getDouble(
+                "event.difficulty-scaling.health-per-additional-fighter", 125.0), 125.0)) {
+            getConfig().set("event.difficulty-scaling.health-per-additional-fighter", 250.0);
+        }
+        if (approximately(getConfig().getDouble(
+                "event.difficulty-scaling.maximum-effective-health", 5000.0), 5000.0)) {
+            getConfig().set("event.difficulty-scaling.maximum-effective-health", 6000.0);
+        }
+        getConfig().set("config-version", 2);
+        getLogger().info("Updated Dragon health balance to config version 2.");
+    }
+
+    private boolean approximately(double value, double expected) {
+        return Math.abs(value - expected) < 0.000001;
     }
 }

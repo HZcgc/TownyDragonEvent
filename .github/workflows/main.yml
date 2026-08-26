@@ -28,6 +28,6 @@ jobs:
       - name: Upload plugin JAR
         uses: actions/upload-artifact@v4
         with:
-          name: TownyDragonEvent-build26
-          path: target/TownyDragonEvent-0.1.0-build26.jar
+          name: TownyDragonEvent-build27
+          path: target/TownyDragonEvent-0.1.0-build27.jar
           if-no-files-found: error
