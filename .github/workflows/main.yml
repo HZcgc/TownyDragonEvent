@@ -31,3 +31,4 @@ jobs:
           name: TownyDragonEvent-build28
           path: target/TownyDragonEvent-0.1.0-build28.jar
           if-no-files-found: error
+          retention-days: 30
