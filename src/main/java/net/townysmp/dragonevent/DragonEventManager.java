@@ -631,7 +631,7 @@ final class DragonEventManager implements Listener {
         aprilCreeper = eventWorld.spawn(spawn, Creeper.class, creeper -> {
             creeper.setAI(false);
             creeper.setGravity(false);
-            creeper.setSilent(false);
+            creeper.setSilent(true);
             creeper.setPersistent(true);
             creeper.setRemoveWhenFarAway(false);
             creeper.setCollidable(false);
@@ -655,7 +655,8 @@ final class DragonEventManager implements Listener {
 
     private void tickAprilFoolsEffects() {
         if (aprilCreeper == null || !aprilCreeper.isValid() || eventWorld == null) return;
-        if (plugin.getConfig().getBoolean("april-fools.sounds.enabled", true)) {
+        if (plugin.getConfig().getBoolean("april-fools.sounds.creeper-voice-enabled", false)
+                && plugin.getConfig().getBoolean("april-fools.sounds.enabled", true)) {
             int ambientInterval = Math.max(20,
                     plugin.getConfig().getInt("april-fools.sounds.ambient.interval-ticks", 80));
             if (++aprilAmbientSoundTicks >= ambientInterval) {
@@ -700,7 +701,9 @@ final class DragonEventManager implements Listener {
     }
 
     private void playAprilSound(String path, String fallbackSound, float fallbackVolume, float fallbackPitch) {
-        if (eventWorld == null || !plugin.getConfig().getBoolean("april-fools.sounds.enabled", true)) return;
+        if (eventWorld == null
+                || !plugin.getConfig().getBoolean("april-fools.sounds.creeper-voice-enabled", false)
+                || !plugin.getConfig().getBoolean("april-fools.sounds.enabled", true)) return;
         String sound = plugin.getConfig().getString(path + ".sound", fallbackSound);
         if (sound == null || sound.isBlank()) return;
         float volume = (float) Math.max(0.0, plugin.getConfig().getDouble(path + ".volume", fallbackVolume));
@@ -755,6 +758,20 @@ final class DragonEventManager implements Listener {
     public void onScaledDragonDamage(EntityDamageEvent event) {
         if (state != EventState.ACTIVE || event.getEntity() != dragon) return;
         event.setDamage(event.getDamage() * incomingDamageMultiplier);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onAprilProjectileHitsCarrier(EntityDamageByEntityEvent event) {
+        if (eventMode != EventMode.APRIL_FOOLS || state != EventState.ACTIVE
+                || event.getEntity() != dragon || !isAprilProjectile(event.getDamager())) return;
+        Vector flightVelocity = dragon.getVelocity().clone();
+        event.setCancelled(true);
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (eventMode == EventMode.APRIL_FOOLS && state == EventState.ACTIVE
+                    && dragon != null && dragon.isValid()) {
+                dragon.setVelocity(flightVelocity);
+            }
+        });
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -1091,6 +1108,14 @@ final class DragonEventManager implements Listener {
         Location current = dragon.getLocation();
         double minimumY = plugin.getConfig().getDouble("event.dragon-watchdog.minimum-y", -20.0);
         double maximumY = plugin.getConfig().getDouble("event.dragon-watchdog.maximum-y", 300.0);
+        if (eventMode == EventMode.APRIL_FOOLS) {
+            Location center = portalLocation(eventWorld.getEnderDragonBattle());
+            if (center != null) {
+                double aprilMaximum = Math.max(30.0,
+                        plugin.getConfig().getDouble("april-fools.carrier.maximum-height-above-portal", 65.0));
+                maximumY = Math.min(maximumY, center.getY() + aprilMaximum);
+            }
+        }
         boolean outside = current.getY() < minimumY || current.getY() > maximumY
                 || (plugin.getConfig().getBoolean("world.border.enabled", true)
                 && !eventWorld.getWorldBorder().isInside(current));
@@ -1110,7 +1135,8 @@ final class DragonEventManager implements Listener {
         Location rescue = dragonRescueLocation();
         dragon.teleport(rescue);
         dragon.setVelocity(new Vector());
-        dragon.setPhase(EnderDragon.Phase.CIRCLING);
+        dragon.setPhase(eventMode == EventMode.APRIL_FOOLS
+                ? EnderDragon.Phase.LAND_ON_PORTAL : EnderDragon.Phase.CIRCLING);
         dragonStationarySeconds = 0;
         lastDragonLocation = rescue.clone();
         for (Player player : eventWorld.getPlayers()) messages.send(player, "dragon-watchdog-rescue");
@@ -1127,7 +1153,9 @@ final class DragonEventManager implements Listener {
         DragonBattle battle = eventWorld.getEnderDragonBattle();
         Location center = portalLocation(battle);
         if (center == null) center = joinLocation();
-        double offset = plugin.getConfig().getDouble("event.dragon-watchdog.rescue-height-offset", 70.0);
+        double offset = eventMode == EventMode.APRIL_FOOLS
+                ? plugin.getConfig().getDouble("april-fools.carrier.rescue-height-above-portal", 45.0)
+                : plugin.getConfig().getDouble("event.dragon-watchdog.rescue-height-offset", 70.0);
         double y = Math.max(eventWorld.getMinHeight() + 10.0,
                 Math.min(eventWorld.getMaxHeight() - 10.0, center.getY() + offset));
         return new Location(eventWorld, center.getX() + 0.5, y, center.getZ() + 0.5, 0.0f, 0.0f);
@@ -2088,6 +2116,10 @@ final class DragonEventManager implements Listener {
             return projectile.getShooter() == dragon || projectile.getShooter() == aprilCreeper;
         }
         return false;
+    }
+
+    private boolean isAprilProjectile(Entity entity) {
+        return entity != null && entity.getScoreboardTags().contains("townysmp_april_projectile");
     }
 
     private void cancelTicker() {

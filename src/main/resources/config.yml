@@ -201,6 +201,12 @@ april-fools:
   # Damage dealt to this giant Creeper proxy is forwarded to the Dragon.
   creeper-scale: 6.0
   vertical-offset: -4.0
+  carrier:
+    # Own April projectiles cannot damage or knock the hidden carrier Dragon.
+    # The watchdog also returns it to a reachable height if another explosion
+    # or plugin still manages to push it too far above the arena.
+    maximum-height-above-portal: 65.0
+    rescue-height-above-portal: 45.0
   projectiles:
     # Every Dragon fireball becomes several flying TNT/Ghast projectiles.
     tnt-chance: 0.5
@@ -218,6 +224,9 @@ april-fools:
       spread-degrees: 18.0
   sounds:
     enabled: true
+    # Disabled by default: the repeated Creeper hurt/ambient noises are very
+    # harsh at boss scale. TNT fuses and Ghast fireballs remain audible.
+    creeper-voice-enabled: false
     # Plays boss sounds directly to everyone inside the arena, so distance
     # from the flying Creeper cannot make it inaudible.
     global-to-arena: true
