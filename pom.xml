@@ -3,10 +3,10 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.townysmp</groupId>
   <artifactId>TownyDragonEvent</artifactId>
-  <version>0.1.0-build28</version>
+  <version>0.1.0-build29</version>
   <name>TownyDragonEvent</name>
   <properties>
-    <maven.compiler.release>21</maven.compiler.release>
+    <maven.compiler.release>25</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
   <repositories>
@@ -16,7 +16,7 @@
   <dependencies>
     <dependency>
       <groupId>io.papermc.paper</groupId><artifactId>paper-api</artifactId>
-      <version>1.21.11-R0.1-SNAPSHOT</version><scope>provided</scope>
+      <version>26.2.build.121-stable</version><scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>me.clip</groupId><artifactId>placeholderapi</artifactId>
@@ -34,7 +34,7 @@
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.13.0</version>
-        <configuration><release>21</release><includes><include>net/townysmp/dragonevent/**/*.java</include></includes></configuration>
+        <configuration><release>25</release><includes><include>net/townysmp/dragonevent/**/*.java</include></includes></configuration>
       </plugin>
     </plugins>
   </build>

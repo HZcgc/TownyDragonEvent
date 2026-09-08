@@ -1,14 +1,14 @@
 name: TownyDragonEvent
 version: ${project.version}
 main: net.townysmp.dragonevent.TownyDragonEventPlugin
-api-version: '1.21'
-author: TownySMP
-description: Isolated Ender Dragon events with a vanilla respawn sequence.
+api-version: '26.2'
+author: TownyReborn
+description: Isolated TownyReborn Ender Dragon events with a vanilla respawn sequence.
 website: https://github.com/HZcgc/TownyDragonEvent
 softdepend: [PlaceholderAPI]
 commands:
   dragon:
-    description: TownySMP Dragon Event
+    description: TownyReborn Dragon Event
     usage: /dragon <join|leave|status|stats|start [normal|april_fools|april fools] [seconds]|stop|reload|setspawn|setportal|setexit|season>
 permissions:
   townysmp.dragon.join:

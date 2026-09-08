@@ -20,7 +20,7 @@ final class DragonPlaceholderExpansion extends PlaceholderExpansion {
     }
 
     @Override public @NotNull String getIdentifier() { return "townydragon"; }
-    @Override public @NotNull String getAuthor() { return "TownySMP"; }
+    @Override public @NotNull String getAuthor() { return "TownyReborn"; }
     @Override public @NotNull String getVersion() { return plugin.getPluginMeta().getVersion(); }
     @Override public boolean persist() { return true; }
 

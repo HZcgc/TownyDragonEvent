@@ -606,7 +606,7 @@ final class DragonEventManager implements Listener {
      * Paper does not expose a public setter for the DragonBattle portal center.
      * Without this, a custom fountain that differs slightly from the Vanilla
      * block pattern makes Minecraft generate a second fountain at the heightmap.
-     * Paper 1.21.11 runs with Mojang mappings, so keep both known field names as
+     * Modern Paper runs with Mojang mappings, so keep both known field names as
      * a guarded compatibility fallback and verify the value through Bukkit API.
      */
     private boolean forceBattlePortalLocation(DragonBattle battle, Location portal) {
@@ -626,7 +626,7 @@ final class DragonEventManager implements Listener {
                     && applied.getBlockY() == portal.getBlockY()
                     && applied.getBlockZ() == portal.getBlockZ();
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            plugin.getLogger().log(Level.SEVERE, "Paper 1.21.11 Dragon portal location hook failed", exception);
+            plugin.getLogger().log(Level.SEVERE, "Paper 26.2 Dragon portal location hook failed", exception);
             return false;
         }
     }
