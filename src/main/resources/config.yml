@@ -1,7 +1,8 @@
 config-version: 3
 
 world:
-  # Both folders are relative to the server world-container.
+  # These are Bukkit world names, not literal filesystem paths. On Paper 26.2
+  # the plugin resolves them below <level-name>/dimensions/minecraft/ itself.
   # Optional manual override. Leave this empty and the plugin automatically
   # uses a loaded world or world folder named by auto-template-name. If that
   # world does not exist, vanilla-end-folder is used instead.

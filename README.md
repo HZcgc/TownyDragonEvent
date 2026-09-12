@@ -60,4 +60,4 @@ Requires Java 25:
 mvn -B clean package
 ```
 
-The compiled plugin is written to `target/TownyDragonEvent-0.1.0-build29.jar`.
+The compiled plugin is written to `target/TownyDragonEvent-0.1.0-build30.jar`.

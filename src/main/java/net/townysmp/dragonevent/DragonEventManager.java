@@ -219,8 +219,12 @@ final class DragonEventManager implements Listener {
 
         String automaticName = plugin.getConfig().getString("world.auto-template-name", "dragonevent_template").trim();
         if (!automaticName.isEmpty()) {
-            Path automaticFolder = Bukkit.getWorldContainer().toPath().resolve(automaticName).normalize();
-            if (Bukkit.getWorld(automaticName) != null || Files.isDirectory(automaticFolder)) return automaticName;
+            try {
+                Path automaticFolder = safeWorldPath(automaticName);
+                if (Bukkit.getWorld(automaticName) != null || Files.isDirectory(automaticFolder)) return automaticName;
+            } catch (IllegalArgumentException exception) {
+                plugin.getLogger().warning("Could not resolve automatic Dragon template world: " + exception.getMessage());
+            }
         }
         return plugin.getConfig().getString("world.vanilla-end-folder", "world_the_end").trim();
     }
@@ -254,12 +258,41 @@ final class DragonEventManager implements Listener {
                 || !worldName.matches("[A-Za-z0-9._-]+")) {
             throw new IllegalArgumentException("Unsafe world folder name: " + worldName);
         }
+
+        World loadedWorld = Bukkit.getWorld(worldName);
+        if (loadedWorld != null) {
+            Path loadedFolder = loadedWorld.getWorldFolder().toPath().toAbsolutePath().normalize();
+            if (!loadedFolder.startsWith(worldContainerPath())) {
+                throw new IllegalArgumentException("Loaded world folder is outside the server world container: "
+                        + loadedFolder);
+            }
+            return loadedFolder;
+        }
+
         Path root = worldContainerPath();
-        Path candidate = root.resolve(worldName).toAbsolutePath().normalize();
-        if (candidate.equals(root) || candidate.getParent() == null || !candidate.getParent().equals(root)) {
-            throw new IllegalArgumentException("World folder must be a direct child of " + root + ": " + worldName);
+        Path namespaceDirectory = minecraftNamespaceDirectory();
+        Path candidate = namespaceDirectory.resolve(worldName).toAbsolutePath().normalize();
+        if (!candidate.startsWith(root) || candidate.getParent() == null
+                || !candidate.getParent().equals(namespaceDirectory)) {
+            throw new IllegalArgumentException("Could not safely resolve Paper world folder for: " + worldName);
         }
         return candidate;
+    }
+
+    private Path minecraftNamespaceDirectory() {
+        Path root = worldContainerPath();
+        for (World world : Bukkit.getWorlds()) {
+            Path folder = world.getWorldFolder().toPath().toAbsolutePath().normalize();
+            Path namespaceDirectory = folder.getParent();
+            Path dimensionsDirectory = namespaceDirectory == null ? null : namespaceDirectory.getParent();
+            if (namespaceDirectory != null && dimensionsDirectory != null
+                    && namespaceDirectory.getFileName().toString().equals("minecraft")
+                    && dimensionsDirectory.getFileName().toString().equals("dimensions")
+                    && namespaceDirectory.startsWith(root)) {
+                return namespaceDirectory;
+            }
+        }
+        throw new IllegalArgumentException("Could not locate Paper's minecraft world namespace below " + root);
     }
 
     private synchronized CompletableFuture<Void> queueWorldIo(WorldIoOperation operation) {

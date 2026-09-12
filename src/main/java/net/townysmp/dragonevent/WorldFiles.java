@@ -16,10 +16,14 @@ final class WorldFiles {
     private WorldFiles() {}
 
     static void copy(Path worldContainer, Path source, Path target) throws IOException {
-        requireDirectChild(worldContainer, source, "template");
-        requireDirectChild(worldContainer, target, "runtime");
+        requireManagedWorldFolder(worldContainer, source, "template");
+        requireManagedWorldFolder(worldContainer, target, "runtime");
         if (source.toAbsolutePath().normalize().equals(target.toAbsolutePath().normalize())) {
             throw new IOException("Template and runtime world must be different folders");
+        }
+        if (!source.toAbsolutePath().normalize().getParent()
+                .equals(target.toAbsolutePath().normalize().getParent())) {
+            throw new IOException("Template and runtime world must use the same Paper world namespace");
         }
         if (!Files.isDirectory(source)) throw new IOException("Template world does not exist: " + source);
         if (Files.isSymbolicLink(source)) throw new IOException("Template world must not be a symbolic link: " + source);
@@ -49,7 +53,7 @@ final class WorldFiles {
     }
 
     static void delete(Path worldContainer, Path target) throws IOException {
-        requireDirectChild(worldContainer, target, "runtime");
+        requireManagedWorldFolder(worldContainer, target, "runtime");
         if (!Files.exists(target)) return;
         if (!isOwnedRuntime(worldContainer, target)) {
             throw new IOException("Refusing to delete a runtime folder without the ownership marker: " + target);
@@ -71,16 +75,32 @@ final class WorldFiles {
     }
 
     static boolean isOwnedRuntime(Path worldContainer, Path target) throws IOException {
-        requireDirectChild(worldContainer, target, "runtime");
+        requireManagedWorldFolder(worldContainer, target, "runtime");
         return Files.isDirectory(target) && !Files.isSymbolicLink(target)
                 && Files.isRegularFile(target.resolve(OWNERSHIP_MARKER));
     }
 
-    private static void requireDirectChild(Path worldContainer, Path folder, String label) throws IOException {
+    private static void requireManagedWorldFolder(Path worldContainer, Path folder, String label) throws IOException {
         Path root = worldContainer.toAbsolutePath().normalize();
         Path candidate = folder.toAbsolutePath().normalize();
-        if (candidate.equals(root) || candidate.getParent() == null || !candidate.getParent().equals(root)) {
+        if (candidate.equals(root) || !candidate.startsWith(root)) {
             throw new IOException("Unsafe " + label + " world path outside the world container: " + candidate);
         }
+
+        Path relative = root.relativize(candidate);
+        boolean legacyWorldFolder = relative.getNameCount() == 1;
+        boolean paperWorldFolder = relative.getNameCount() == 4
+                && relative.getName(1).toString().equals("dimensions")
+                && isSafeSegment(relative.getName(0))
+                && isSafeSegment(relative.getName(2))
+                && isSafeSegment(relative.getName(3));
+        if (!legacyWorldFolder && !paperWorldFolder) {
+            throw new IOException("Unsafe " + label + " world path; expected a direct world folder or "
+                    + "<level-name>/dimensions/<namespace>/<key>: " + candidate);
+        }
+    }
+
+    private static boolean isSafeSegment(Path segment) {
+        return segment.toString().matches("[A-Za-z0-9._-]+");
     }
 }
