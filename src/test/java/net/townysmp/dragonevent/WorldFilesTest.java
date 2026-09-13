@@ -23,6 +23,7 @@ final class WorldFilesTest {
         write(template, "uid.dat", "template uuid");
         write(template, "session.lock", "lock");
         write(template, "data/paper/metadata.dat", "paper uuid");
+        write(template, "data/paper/level_overrides.dat", "level settings");
         write(template, "data/weather.dat", "weather");
         write(template, "data/world_clocks.dat", "clock");
         write(template, "data/chunk_tickets.dat", "tickets");
@@ -37,6 +38,7 @@ final class WorldFilesTest {
         assertFalse(Files.exists(runtime.resolve("uid.dat")));
         assertFalse(Files.exists(runtime.resolve("session.lock")));
         assertFalse(Files.exists(runtime.resolve("data/paper/metadata.dat")));
+        assertFalse(Files.exists(runtime.resolve("data/paper/level_overrides.dat")));
         assertFalse(Files.exists(runtime.resolve("data/weather.dat")));
         assertFalse(Files.exists(runtime.resolve("data/world_clocks.dat")));
         assertFalse(Files.exists(runtime.resolve("data/chunk_tickets.dat")));

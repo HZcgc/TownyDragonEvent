@@ -18,6 +18,10 @@ final class WorldFiles {
             // Paper 26.1+ stores the Bukkit world UUID here. Copying it makes
             // Paper reject the runtime clone as a duplicate of the template.
             Path.of("data", "paper", "metadata.dat"),
+            // Per-dimension level settings are runtime state as well. A stale
+            // or partially written copy produces a ZLIB error while Paper is
+            // loading the clone, so let Paper create a fresh file instead.
+            Path.of("data", "paper", "level_overrides.dat"),
             // These files contain volatile server state rather than arena
             // contents. Paper safely recreates them for every runtime clone.
             Path.of("data", "weather.dat"),
