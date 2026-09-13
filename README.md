@@ -15,7 +15,7 @@ TownyDragonEvent runs scheduled, isolated Ender Dragon fights for TownyReborn on
 - Reward commands, damage tiers, rankings, seasons and victory fireworks
 - Five-life spectator system, KeepInventory, safe respawns, void rescue and a world border
 - Configurable arena destruction and optional building lock
-- Crash-safe, serialized template copy/reset lifecycle with validated paths and an ownership marker
+- Crash-safe, serialized template copy/reset lifecycle with validated paths, an ownership marker and fresh Paper world metadata
 - One controlled asynchronous teleport per player and a reconnect grace period
 - No runtime dependency except Paper; PlaceholderAPI is optional
 
@@ -60,4 +60,4 @@ Requires Java 25:
 mvn -B clean package
 ```
 
-The compiled plugin is written to `target/TownyDragonEvent-0.1.0-build30.jar`.
+The compiled plugin is written to `target/TownyDragonEvent-0.1.0-build31.jar`.

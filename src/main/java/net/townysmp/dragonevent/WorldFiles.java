@@ -11,7 +11,20 @@ import java.util.Set;
 
 final class WorldFiles {
     private static final String OWNERSHIP_MARKER = ".townysmp-dragon-runtime";
-    private static final Set<String> SKIP = Set.of("uid.dat", "session.lock", OWNERSHIP_MARKER);
+    private static final Set<Path> SKIP = Set.of(
+            Path.of("uid.dat"),
+            Path.of("session.lock"),
+            Path.of(OWNERSHIP_MARKER),
+            // Paper 26.1+ stores the Bukkit world UUID here. Copying it makes
+            // Paper reject the runtime clone as a duplicate of the template.
+            Path.of("data", "paper", "metadata.dat"),
+            // These files contain volatile server state rather than arena
+            // contents. Paper safely recreates them for every runtime clone.
+            Path.of("data", "weather.dat"),
+            Path.of("data", "world_clocks.dat"),
+            Path.of("data", "chunk_tickets.dat"),
+            Path.of("data", "raids.dat")
+    );
 
     private WorldFiles() {}
 
@@ -44,8 +57,9 @@ final class WorldFiles {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                if (!SKIP.contains(file.getFileName().toString())) {
-                    Files.copy(file, target.resolve(source.relativize(file)), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                Path relative = source.relativize(file);
+                if (!SKIP.contains(relative)) {
+                    Files.copy(file, target.resolve(relative), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
                 }
                 return FileVisitResult.CONTINUE;
             }
