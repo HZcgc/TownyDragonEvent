@@ -38,6 +38,8 @@ public final class TownyDragonEventPlugin extends JavaPlugin {
         if (statsManager != null) statsManager.save();
     }
 
+    public java.util.Map<String,Object> getStaffStatistics(){return statsManager.snapshot();}
+
     void reloadPlugin() {
         reloadConfig();
         migrateConfig();

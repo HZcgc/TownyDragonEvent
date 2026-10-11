@@ -5,6 +5,8 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import java.io.File;
 import java.io.IOException;
 import java.util.UUID;
+import java.util.*;
+import java.nio.file.*;
 import java.util.logging.Level;
 
 final class StatsManager {
@@ -22,6 +24,8 @@ final class StatsManager {
 
     synchronized RecordResult record(UUID uuid, String name, double damage, int rank, int deaths,
                                      int crystals, int explosions) {
+        data.set("players."+uuid+".name",name);
+        data.set(seasonRoot(uuid)+"name",name);
         double oldPersonalBest = personalBest(uuid);
         double oldServerRecord = serverRecordDamage();
         updatePlayer("players." + uuid + ".", damage, rank, deaths, crystals, explosions);
@@ -83,8 +87,36 @@ final class StatsManager {
         plugin.saveConfig();
     }
 
+    synchronized Map<String,Object> snapshot() {
+        List<Map<String,Object>> rows=new ArrayList<>();var section=data.getConfigurationSection("players");
+        if(section!=null)for(String uuid:section.getKeys(false)) {
+            var player=section.getConfigurationSection(uuid);if(player==null)continue;
+            Map<String,Object> row=new LinkedHashMap<>(player.getValues(false));row.put("uuid",uuid);
+            row.putIfAbsent("name",Objects.toString(org.bukkit.Bukkit.getOfflinePlayer(UUID.fromString(uuid)).getName(),uuid));rows.add(row);
+        }
+        return Map.of("players",rows);
+    }
+    synchronized List<String> topDamage(boolean season) {
+        String root=season?"seasons."+season().replaceAll("[^A-Za-z0-9_-]","_")+".players":"players";var section=data.getConfigurationSection(root);
+        if(section==null)return List.of();
+        return section.getKeys(false).stream().filter(id->section.getDouble(id+".total-damage")>0)
+            .sorted(Comparator.comparingDouble((String id)->section.getDouble(id+".total-damage")).reversed()).limit(5)
+            .map(id->section.getString(id+".name",data.getString("players."+id+".name",Objects.toString(org.bukkit.Bukkit.getOfflinePlayer(UUID.fromString(id)).getName(),id)))+" · "+String.format(Locale.ROOT,"%.1f",section.getDouble(id+".total-damage"))).toList();
+    }
+
+    synchronized List<String> topWins() {
+        var section=data.getConfigurationSection("players");if(section==null)return List.of();
+        return section.getKeys(false).stream().filter(id->section.getInt(id+".wins")>0)
+            .sorted(Comparator.comparingInt((String id)->section.getInt(id+".wins")).reversed()).limit(5)
+            .map(id->section.getString(id+".name",Objects.toString(org.bukkit.Bukkit.getOfflinePlayer(UUID.fromString(id)).getName(),id))+" · "+section.getInt(id+".wins")+" wins").toList();
+    }
+
     synchronized void save() {
-        try { data.save(target); }
+        try {
+            Path path=target.toPath(),tmp=path.resolveSibling(path.getFileName()+".tmp");
+            Files.writeString(tmp,data.saveToString());
+            try{Files.move(tmp,path,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);}catch(AtomicMoveNotSupportedException e){Files.move(tmp,path,StandardCopyOption.REPLACE_EXISTING);}
+        }
         catch (IOException ex) { plugin.getLogger().log(Level.SEVERE, "Could not save stats.yml", ex); }
     }
 

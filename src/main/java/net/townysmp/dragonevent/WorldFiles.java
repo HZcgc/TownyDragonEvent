@@ -3,6 +3,7 @@ package net.townysmp.dragonevent;
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
@@ -61,6 +62,7 @@ final class WorldFiles {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                if(attrs.isSymbolicLink())throw new IOException("Template contents must not contain symbolic links: "+file);
                 Path relative = source.relativize(file);
                 if (!SKIP.contains(relative)) {
                     Files.copy(file, target.resolve(relative), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
@@ -95,7 +97,8 @@ final class WorldFiles {
     static boolean isOwnedRuntime(Path worldContainer, Path target) throws IOException {
         requireManagedWorldFolder(worldContainer, target, "runtime");
         return Files.isDirectory(target) && !Files.isSymbolicLink(target)
-                && Files.isRegularFile(target.resolve(OWNERSHIP_MARKER));
+                && Files.isRegularFile(target.resolve(OWNERSHIP_MARKER), LinkOption.NOFOLLOW_LINKS)
+                && Files.readString(target.resolve(OWNERSHIP_MARKER)).equals("TownyDragonEvent disposable runtime world\n");
     }
 
     private static void requireManagedWorldFolder(Path worldContainer, Path folder, String label) throws IOException {
@@ -105,6 +108,9 @@ final class WorldFiles {
             throw new IOException("Unsafe " + label + " world path outside the world container: " + candidate);
         }
 
+        for (Path current=candidate;current!=null && !current.equals(root);current=current.getParent()) {
+            if (Files.isSymbolicLink(current)) throw new IOException("Refusing a symbolic link in the " + label + " world path: " + current);
+        }
         Path relative = root.relativize(candidate);
         boolean legacyWorldFolder = relative.getNameCount() == 1;
         boolean paperWorldFolder = relative.getNameCount() == 4
@@ -116,6 +122,18 @@ final class WorldFiles {
             throw new IOException("Unsafe " + label + " world path; expected a direct world folder or "
                     + "<level-name>/dimensions/<namespace>/<key>: " + candidate);
         }
+    }
+
+    /** Preserve unmarked legacy worlds; choose a different marked/unused sibling. */
+    static Path selectRuntime(Path container, Path configured) throws IOException {
+        requireManagedWorldFolder(container, configured, "runtime");
+        if (!Files.exists(configured, LinkOption.NOFOLLOW_LINKS) || isOwnedRuntime(container,configured)) return configured;
+        for (int i=1;i<=100;i++) {
+            Path sibling=configured.resolveSibling(configured.getFileName()+"_tr"+i);
+            requireManagedWorldFolder(container,sibling,"runtime");
+            if (!Files.exists(sibling,LinkOption.NOFOLLOW_LINKS) || isOwnedRuntime(container,sibling)) return sibling;
+        }
+        throw new IOException("No safe free runtime folder available next to "+configured);
     }
 
     private static boolean isSafeSegment(Path segment) {

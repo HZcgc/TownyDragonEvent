@@ -2,7 +2,7 @@ name: Build TownyDragonEvent
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, "codex/**" ]
   pull_request:
     branches:
       - main
@@ -26,8 +26,8 @@ jobs:
       - name: Upload plugin JAR
         uses: actions/upload-artifact@v4
         with:
-          name: TownyDragonEvent-build32-Paper-26.2
-          path: target/TownyDragonEvent-0.1.0-build32.jar
+          name: TownyDragonEvent-build33-Paper-26.2
+          path: target/TownyDragonEvent-0.1.0-build33.jar
           if-no-files-found: error
           retention-days: 30
 
@@ -35,13 +35,13 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v0.1.0-build32
-          JAR: target/TownyDragonEvent-0.1.0-build32.jar
+          TAG: v0.1.0-build33
+          JAR: target/TownyDragonEvent-0.1.0-build33.jar
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$JAR" --clobber
           else
             gh release create "$TAG" "$JAR" \
-              --title "TownyDragonEvent 0.1.0-build32" \
+              --title "TownyDragonEvent 0.1.0-build33" \
               --generate-notes
           fi

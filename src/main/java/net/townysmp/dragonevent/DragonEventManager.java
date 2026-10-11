@@ -76,6 +76,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -116,6 +117,11 @@ final class DragonEventManager implements Listener {
     private EventState state = EventState.IDLE;
     private World eventWorld;
     private String activeRuntimeName;
+    private Path activeRuntimePath;
+    private String resultEventId;
+    private final Set<String> preservedRuntimeNames=new HashSet<>();
+    private final EventDisplays displays;
+    private BukkitTask displayTask;
     private EnderDragon dragon;
     private Creeper aprilCreeper;
     private EventMode eventMode = EventMode.NORMAL;
@@ -143,6 +149,7 @@ final class DragonEventManager implements Listener {
     private boolean statisticsRecorded;
     private boolean shuttingDown;
     private boolean resetDeleteQueued;
+    private boolean recoveryBlocked;
     private long lifecycleGeneration;
     private int difficultyFighterCount;
 
@@ -150,6 +157,7 @@ final class DragonEventManager implements Listener {
         this.plugin = plugin;
         this.messages = messages;
         this.stats = stats;
+        this.displays=new EventDisplays(plugin);
     }
 
     EventState state() { return state; }
@@ -333,17 +341,17 @@ final class DragonEventManager implements Listener {
             return false;
         }
         try {
-            if (Files.exists(runtime) && !WorldFiles.isOwnedRuntime(container, runtime)) {
-                plugin.getLogger().severe("The runtime target already exists but is not owned by TownyDragonEvent: " + runtime);
-                return false;
+            Path selected=WorldFiles.selectRuntime(container,runtime);
+            if(!selected.equals(runtime)) {
+                preservedRuntimeNames.add(runtimeName);
+                plugin.getLogger().warning("Preserving unmarked legacy runtime: "+runtime+". Using a separate event clone: "+selected);
+                runtime=selected;runtimeName=selected.getFileName().toString();
             }
-        } catch (IOException exception) {
-            plugin.getLogger().log(Level.SEVERE, "Could not validate the runtime world folder", exception);
-            return false;
+        } catch(IOException exception) {
+            plugin.getLogger().log(Level.SEVERE,"Could not choose a safe event runtime",exception);return false;
         }
         if (Bukkit.getWorld(runtimeName) != null) {
-            plugin.getLogger().severe("The runtime world " + runtimeName + " is still loaded. Use /dragon stop and check the console.");
-            return false;
+            plugin.getLogger().severe("The runtime world " + runtimeName + " is still loaded. Use /dragon stop and check the console.");return false;
         }
         World loadedSource = Bukkit.getWorld(sourceFolder);
         if (loadedSource != null) template = loadedSource.getWorldFolder().toPath().toAbsolutePath().normalize();
@@ -353,6 +361,9 @@ final class DragonEventManager implements Listener {
         }
         eventMode = requestedMode == null ? EventMode.NORMAL : requestedMode;
         activeRuntimeName = runtimeName;
+        activeRuntimePath = runtime;
+        resultEventId=UUID.randomUUID().toString();
+        try { saveRuntimeJournal(); } catch(IOException e) {plugin.getLogger().log(Level.SEVERE,"Could not checkpoint the event runtime",e);resetFailedPreparation();return false;}
         state = EventState.PREPARING;
         long operation = ++lifecycleGeneration;
         secondsLeft = customSeconds == null
@@ -378,10 +389,12 @@ final class DragonEventManager implements Listener {
             }
         }
         Path finalTemplate = template;
-        prepareFuture = queueWorldIo(() -> WorldFiles.copy(container, finalTemplate, runtime));
+        Path finalRuntime = runtime;
+        prepareFuture = queueWorldIo(() -> WorldFiles.copy(container, finalTemplate, finalRuntime));
         prepareFuture.whenComplete((ignored, error) -> runOnServerThread(() -> {
             if (reloadSource && Bukkit.getWorld(sourceFolder) == null) {
-                new WorldCreator(sourceFolder).environment(World.Environment.THE_END).createWorld();
+                try { new WorldCreator(sourceFolder).environment(World.Environment.THE_END).createWorld(); }
+                catch(RuntimeException e){plugin.getLogger().log(Level.SEVERE,"Could not reload the source world; its files were preserved",e);}
             }
             if (operation != lifecycleGeneration || state != EventState.PREPARING) return;
             if (error != null) {
@@ -398,21 +411,31 @@ final class DragonEventManager implements Listener {
         state = EventState.IDLE;
         eventMode = EventMode.NORMAL;
         activeRuntimeName = null;
+        activeRuntimePath = null;
+        deleteRuntimeJournal();
         secondsLeft = 0;
     }
 
     private void loadWorldAndStartCountdown() {
         if (state != EventState.PREPARING) return;
         String runtimeName = activeRuntimeName == null ? runtimeWorldName() : activeRuntimeName;
-        eventWorld = new WorldCreator(runtimeName)
+        try { eventWorld = new WorldCreator(runtimeName)
                 .environment(World.Environment.THE_END)
                 .generateStructures(false)
-                .createWorld();
+                .createWorld(); }
+        catch(RuntimeException e){plugin.getLogger().log(Level.SEVERE,"Could not load the prepared Dragon clone",e);eventWorld=null;evacuateAndReset();return;}
         if (eventWorld == null) {
             plugin.getLogger().severe("Paper could not load event world " + runtimeName);
             evacuateAndReset();
             return;
         }
+        Path actualFolder=eventWorld.getWorldFolder().toPath().toAbsolutePath().normalize();
+        if(eventWorld.getEnvironment()!=World.Environment.THE_END || !actualFolder.equals(activeRuntimePath)) {
+            plugin.getLogger().severe("Paper loaded a different runtime folder than the prepared clone. Preserving that folder: "+actualFolder);
+            preservedRuntimeNames.add(runtimeName);eventWorld=null;evacuateAndReset();return;
+        }
+        try { if(!WorldFiles.isOwnedRuntime(worldContainerPath(),actualFolder))throw new IOException("The loaded event clone lost its ownership marker"); }
+        catch(IOException e){plugin.getLogger().log(Level.SEVERE,"Runtime ownership check failed",e);evacuateAndReset();return;}
         eventWorld.setAutoSave(false);
         eventWorld.setGameRule(GameRule.DO_MOB_SPAWNING, false);
         eventWorld.setGameRule(GameRule.LOCATOR_BAR,
@@ -435,6 +458,7 @@ final class DragonEventManager implements Listener {
         if (!openedLobby || secondsLeft != joinSeconds) announceCountdown();
         secondsLeft--;
         ticker = Bukkit.getScheduler().runTaskTimer(plugin, this::eventTick, 20L, 20L);
+        displayTask=Bukkit.getScheduler().runTaskTimer(plugin,this::updateDisplays,1L,20L);
     }
 
     private void eventTick() {
@@ -1714,6 +1738,7 @@ final class DragonEventManager implements Listener {
 
     void stop() {
         if (state == EventState.IDLE) return;
+        if (state == EventState.RESETTING) { if(recoveryBlocked)recoverAfterRestart();else attemptWorldUnload(lifecycleGeneration,0);return; }
         Bukkit.broadcast(messages.get("stopped"));
         cancelEventTasks();
         if (dragon != null && dragon.isValid()) dragon.remove();
@@ -1748,6 +1773,8 @@ final class DragonEventManager implements Listener {
             StatsManager.RecordResult result = stats.record(uuid, name == null ? uuid.toString() : name, dealt, rank,
                     eventDeaths.getOrDefault(uuid, 0), crystalsDestroyed.getOrDefault(uuid, 0),
                     explosionsTriggered.getOrDefault(uuid, 0));
+            Bukkit.getPluginManager().callEvent(new net.townysmp.dragonevent.api.DragonResultEvent(
+                    resultEventId,uuid,name==null?uuid.toString():name,dealt,rank,eventDeaths.getOrDefault(uuid,0),crystalsDestroyed.getOrDefault(uuid,0)));
             Player online = Bukkit.getPlayer(uuid);
             if (online != null) {
                 String resultKey = rank > 0 ? "personal-result" : "personal-result-unranked";
@@ -1917,6 +1944,7 @@ final class DragonEventManager implements Listener {
         state = EventState.RESETTING;
         long operation = ++lifecycleGeneration;
         resetDeleteQueued = false;
+        recoveryBlocked = false;
         cancelAllDisconnectGrace();
         List<CompletableFuture<Boolean>> evacuations = new ArrayList<>();
         for (UUID uuid : new HashSet<>(participants)) {
@@ -1979,14 +2007,20 @@ final class DragonEventManager implements Listener {
         Path runtime;
         try {
             String runtimeName = activeRuntimeName == null ? runtimeWorldName() : activeRuntimeName;
-            runtime = safeWorldPath(runtimeName);
+            runtime = activeRuntimePath==null?safeWorldPath(runtimeName):activeRuntimePath;
         } catch (IllegalArgumentException exception) {
             resetDeleteQueued = false;
             plugin.getLogger().log(Level.SEVERE, "Refusing to delete an unsafe runtime world path", exception);
             return;
         }
         Path container = worldContainerPath();
-        queueWorldIo(() -> WorldFiles.delete(container, runtime)).whenComplete((ignored, error) ->
+        queueWorldIo(() -> {
+            if(Files.exists(runtime) && !WorldFiles.isOwnedRuntime(container,runtime)) {
+                plugin.getLogger().warning("Preserved an unmarked legacy runtime; no files deleted: "+runtime);
+                return;
+            }
+            WorldFiles.delete(container,runtime);
+        }).whenComplete((ignored, error) ->
                 runOnServerThread(() -> {
                     if (operation != lifecycleGeneration || state != EventState.RESETTING) return;
                     if (error != null) {
@@ -2023,6 +2057,9 @@ final class DragonEventManager implements Listener {
         activeTeleports.clear();
         aprilCreeper = null;
         activeRuntimeName = null;
+        activeRuntimePath = null;
+        resultEventId = null;
+        deleteRuntimeJournal();
         eventMode = EventMode.NORMAL;
         fightSecondsLeft = 0;
         closingSecondsLeft = 0;
@@ -2043,45 +2080,47 @@ final class DragonEventManager implements Listener {
         state = EventState.IDLE;
     }
 
+    private Path runtimeJournal() { return plugin.getDataFolder().toPath().resolve("runtime-state.txt"); }
+    private void saveRuntimeJournal() throws IOException {
+        Path journal=runtimeJournal(),tmp=journal.resolveSibling(journal.getFileName()+".tmp");
+        Files.writeString(tmp,activeRuntimeName+"\n"+worldContainerPath().relativize(activeRuntimePath)+"\n");
+        try{Files.move(tmp,journal,java.nio.file.StandardCopyOption.ATOMIC_MOVE,java.nio.file.StandardCopyOption.REPLACE_EXISTING);}
+        catch(java.nio.file.AtomicMoveNotSupportedException e){Files.move(tmp,journal,java.nio.file.StandardCopyOption.REPLACE_EXISTING);}
+    }
+    private void deleteRuntimeJournal(){try{Files.deleteIfExists(runtimeJournal());}catch(IOException e){plugin.getLogger().warning("Could not remove the runtime checkpoint: "+e.getMessage());}}
+
     void recoverAfterRestart() {
-        shuttingDown = false;
-        String runtimeName = runtimeWorldName();
-        Path runtime;
+        shuttingDown=false;String runtimeName=runtimeWorldName();Path runtime;
         try {
-            runtime = safeWorldPath(runtimeName);
-        } catch (IllegalArgumentException exception) {
-            state = EventState.RESETTING;
-            plugin.getLogger().log(Level.SEVERE,
-                    "Unsafe world.runtime-name. Dragon events are disabled until the config is corrected.", exception);
-            return;
-        }
-        String sourceName = resolveTemplateWorldName();
-        if (runtimeName.equals(sourceName)) {
-            state = EventState.RESETTING;
-            plugin.getLogger().severe("world.runtime-name matches the template world. No files were changed.");
-            return;
-        }
-        try {
-            if (Files.exists(runtime) && !WorldFiles.isOwnedRuntime(worldContainerPath(), runtime)) {
-                state = EventState.RESETTING;
-                plugin.getLogger().severe("The configured runtime folder is not owned by TownyDragonEvent. "
-                        + "No files were changed: " + runtime);
-                return;
+            runtime=safeWorldPath(runtimeName);
+            if(Files.isRegularFile(runtimeJournal())) {
+                List<String> saved=Files.readAllLines(runtimeJournal());
+                if(saved.size()!=2||!saved.get(0).matches("[A-Za-z0-9._-]+"))throw new IOException("Invalid runtime checkpoint");
+                runtimeName=saved.get(0);runtime=worldContainerPath().resolve(saved.get(1)).normalize();
+                WorldFiles.isOwnedRuntime(worldContainerPath(),runtime); // validates the complete path, even for an unmarked folder
             }
-        } catch (IOException exception) {
-            state = EventState.RESETTING;
-            plugin.getLogger().log(Level.SEVERE, "Could not validate the stale runtime world", exception);
-            return;
+            Path template=safeWorldPath(resolveTemplateWorldName());
+            World loaded=Bukkit.getWorld(runtimeName);
+            if(runtime.equals(template)||runtimeName.equals(resolveTemplateWorldName())||(loaded!=null&&loaded.getEnvironment()!=World.Environment.THE_END))throw new IOException("Runtime configuration refers to a template or non-End world");
+            activeRuntimeName=runtimeName;activeRuntimePath=runtime;eventWorld=loaded;
+            recoveryBlocked=false;
+            if(Files.exists(runtime)&&!WorldFiles.isOwnedRuntime(worldContainerPath(),runtime)) {
+                preservedRuntimeNames.add(runtimeName);
+                plugin.getLogger().warning("Preserving an unmarked legacy Dragon folder: "+runtime+". The next event will use a separate managed clone.");
+            }
+            evacuateAndReset();
+        } catch(IllegalArgumentException|IOException e) {
+            state=EventState.RESETTING;eventWorld=null;activeRuntimePath=null;activeRuntimeName=null;recoveryBlocked=true;
+            plugin.getLogger().log(Level.SEVERE,"Dragon recovery paused; unsafe runtime configuration. No files changed.",e);
         }
-        activeRuntimeName = runtimeName;
-        eventWorld = Bukkit.getWorld(runtimeName);
-        if (eventWorld != null && eventWorld.getEnvironment() != World.Environment.THE_END) {
-            state = EventState.RESETTING;
-            eventWorld = null;
-            plugin.getLogger().severe("The configured runtime name belongs to a non-End world. No files were changed.");
-            return;
-        }
-        evacuateAndReset();
+    }
+
+    private void updateDisplays() {
+        if(eventWorld==null)return;
+        List<String> live=damage.entrySet().stream().filter(e->e.getValue()>0&&!spectators.contains(e.getKey())&&!departedParticipants.contains(e.getKey()))
+                .sorted(Map.Entry.<UUID,Double>comparingByValue(Comparator.reverseOrder())).limit(5)
+                .map(e->Objects.toString(Bukkit.getOfflinePlayer(e.getKey()).getName(),e.getKey().toString())+" · "+formatDamage(e.getValue())).toList();
+        displays.update(eventWorld,portalLocation(eventWorld.getEnderDragonBattle()),state,Math.max(0,secondsLeft+1),playerCount(),live,stats.topDamage(true),stats.topDamage(false),stats.topWins());
     }
 
     void shutdown() {
@@ -2123,7 +2162,7 @@ final class DragonEventManager implements Listener {
             event.getPlayer().setAllowFlight(false);
         }
         // A crash during an event must never leave a player trapped in the disposable world.
-        if (event.getPlayer().getWorld().getName().equals(managedRuntimeName)
+        if ((event.getPlayer().getWorld().getName().equals(managedRuntimeName) || preservedRuntimeNames.contains(event.getPlayer().getWorld().getName()))
                 && (state == EventState.IDLE || state == EventState.RESETTING)) {
             runFallback(event.getPlayer());
         } else if (departedParticipants.contains(uuid)) {
@@ -2604,6 +2643,7 @@ final class DragonEventManager implements Listener {
     }
 
     private void cancelEventTasks() {
+        if(displayTask!=null)displayTask.cancel();displayTask=null;displays.clear();
         cancelTicker();
         cancelFinishTask();
         cancelFightTasks();
