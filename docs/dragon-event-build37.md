@@ -8,4 +8,4 @@ Replace the previous TownyDragonEvent JAR with `TownyDragonEvent-0.1.0-build37.j
 
 Regression coverage includes the first read of old message files, custom names/prefixes, legacy configurations at versions 0/3/4 and the actual scheduled timer for all three modes after migration. The existing combat, reward, live-board and world-file checks also run against the packaged JAR using the real Paper 26.2 API. These are local JVM checks, not a live Minecraft client/server test.
 
-The CI artifact and release paths now match build 37. Mockito is attached as a startup test agent instead of relying on self-attachment during the test run. Staff Connector code is unchanged by this release.
+The CI artifact and release paths now match build 37. Mockito is attached as a startup test agent instead of relying on self-attachment during the test run. CI installs the hash-verified official PlaceholderAPI 2.11.7 release into its local build cache before Maven, so a failure of the separate PlaceholderAPI Maven service does not block this optional integration. Staff Connector code is unchanged by this release.
