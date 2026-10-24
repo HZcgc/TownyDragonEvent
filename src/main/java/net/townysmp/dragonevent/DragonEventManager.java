@@ -456,6 +456,7 @@ implements Listener {
             return false;
         }
         this.state = EventState.PREPARING;
+        StaffAudit.transition(this, "dragon_events_scheduled", false, "scheduled");
         long operation = ++this.lifecycleGeneration;
         this.secondsLeft = customSeconds == null ? this.plugin.getConfig().getInt("event.countdown-seconds", 10800) : Math.max(10, customSeconds);
         Bukkit.broadcast(this.messages.get("preparing"));
@@ -879,6 +880,7 @@ implements Listener {
         this.lastDragonLocation = this.dragon.getLocation().clone();
         this.dragonStationarySeconds = 0;
         this.startFightClock();
+        StaffAudit.transition(this, "dragon_fights_started", false, "fight_started");
         this.messages.broadcast(eventMode == EventMode.FREDDIE ? "fight-start-freddie" : aprilFools ? "fight-start-april" : "fight-start", Map.of("health", String.format(Locale.US, "%.0f", this.effectiveDragonHealth), "fighters", Integer.toString(this.activeFighterCount())), eventMode == EventMode.FREDDIE ? "freddie-fight" : aprilFools ? "april-fight" : "fight");
         this.checkForBattleLoss();
     }
@@ -1820,6 +1822,7 @@ implements Listener {
         this.cancelTicker();
         this.cancelFightTasks();
         this.state = EventState.FINISHING;
+        StaffAudit.transition(this, "dragon_events_ended", victory, victory ? "victory" : "cancelled");
         if (victory) {
             this.distributeRewards();
             int delay = Math.max(5, this.plugin.getConfig().getInt("event.finish-delay-seconds", 120));
@@ -1838,6 +1841,7 @@ implements Listener {
         this.cancelTicker();
         this.cancelFightTasks();
         this.state = EventState.FINISHING;
+        StaffAudit.transition(this, "dragon_events_ended", false, messageKey);
         this.cancelAprilVisual();
         if (this.dragon != null && this.dragon.isValid()) {
             this.dragon.setInvulnerable(true);
@@ -2034,6 +2038,7 @@ implements Listener {
             String name = Bukkit.getOfflinePlayer(uuid).getName();
             StatsManager.RecordResult result = this.stats.record(uuid, name == null ? uuid.toString() : name, dealt, rank, this.eventDeaths.getOrDefault(uuid, 0), this.crystalsDestroyed.getOrDefault(uuid, 0), this.explosionsTriggered.getOrDefault(uuid, 0));
             Bukkit.getPluginManager().callEvent(new DragonResultEvent(this.resultEventId, uuid, name == null ? uuid.toString() : name, dealt, rank, this.eventDeaths.getOrDefault(uuid, 0), this.crystalsDestroyed.getOrDefault(uuid, 0)));
+            StaffAudit.result(this, uuid, name == null ? uuid.toString() : name, dealt, rank, this.eventDeaths.getOrDefault(uuid, 0), this.crystalsDestroyed.getOrDefault(uuid, 0), this.explosionsTriggered.getOrDefault(uuid, 0), true);
             Player online = Bukkit.getPlayer(uuid);
             if (online != null) {
                 String resultKey = rank > 0 ? "personal-result" : "personal-result-unranked";
@@ -2077,6 +2082,7 @@ implements Listener {
             double dealt = this.damage.getOrDefault(uuid, 0.0);
             String name = Bukkit.getOfflinePlayer(uuid).getName();
             StatsManager.RecordResult result = this.stats.record(uuid, name == null ? uuid.toString() : name, dealt, 0, this.eventDeaths.getOrDefault(uuid, 0), this.crystalsDestroyed.getOrDefault(uuid, 0), this.explosionsTriggered.getOrDefault(uuid, 0));
+            StaffAudit.result(this, uuid, name == null ? uuid.toString() : name, dealt, 0, this.eventDeaths.getOrDefault(uuid, 0), this.crystalsDestroyed.getOrDefault(uuid, 0), this.explosionsTriggered.getOrDefault(uuid, 0), false);
             Player online = Bukkit.getPlayer(uuid);
             if (online == null) continue;
             this.messages.send(online, "defeat-result", Map.of("damage", this.formatDamage(dealt), "deaths", Integer.toString(this.eventDeaths.getOrDefault(uuid, 0)), "crystals", Integer.toString(this.crystalsDestroyed.getOrDefault(uuid, 0)), "explosions", Integer.toString(this.explosionsTriggered.getOrDefault(uuid, 0))));
@@ -2155,7 +2161,9 @@ implements Listener {
         }
         ConsoleCommandSender console = Bukkit.getConsoleSender();
         for (String command : this.plugin.getConfig().getStringList(path)) {
-            Bukkit.dispatchCommand(console, this.applyCommandVariables(command, name, uuid, rank, dealt, players));
+            String expanded = this.applyCommandVariables(command, name, uuid, rank, dealt, players);
+            boolean accepted = Bukkit.dispatchCommand(console, expanded);
+            StaffAudit.reward(this, uuid, name, path, expanded, accepted);
         }
     }
 
