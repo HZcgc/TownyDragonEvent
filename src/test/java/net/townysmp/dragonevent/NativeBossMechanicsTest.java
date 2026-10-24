@@ -86,6 +86,21 @@ final class NativeBossMechanicsTest {
         verify(scheduler, times(3)).runTaskLater(eq(plugin), any(Runnable.class), eq(36000L));
     }
 
+    @Test void upgradedTwentyMinuteConfigSchedulesThirtyMinutesForEveryMode() throws Exception {
+        config.set("config-version", 4);
+        config.set("event.fight-time-limit-seconds", 1200);
+        var migration = TownyDragonEventPlugin.class.getDeclaredMethod("migrateConfig");
+        migration.setAccessible(true);
+        migration.invoke(plugin);
+        for (EventMode mode : EventMode.values()) {
+            set(manager, "eventMode", mode);
+            set(manager, "state", EventState.ACTIVE);
+            call(manager, "startFightClock");
+            assertEquals(1800, manager.fightSecondsRemaining());
+        }
+        verify(scheduler, times(3)).runTaskLater(eq(plugin), any(Runnable.class), eq(36000L));
+    }
+
     @Test void commandCanForceEachModeWhilePlainStartUsesAutomaticSelection() {
         var target = mock(DragonEventManager.class);
         var cmd = new DragonCommand(plugin, target, messages, stats);
@@ -336,3 +351,4 @@ final class NativeBossMechanicsTest {
         assertEquals("28m 20s", capture.getAllValues().get(1).get("time"));
     }
 }
+

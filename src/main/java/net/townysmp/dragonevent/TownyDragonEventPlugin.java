@@ -53,7 +53,7 @@ public final class TownyDragonEventPlugin extends JavaPlugin {
     private void migrateConfig() {
         int version = getConfig().contains("config-version", true)
                 ? getConfig().getInt("config-version", 0) : 0;
-        if (version >= 3) return;
+        if (version >= 5) return;
 
         if (version < 2) {
             // Only replace the exact Build 26 defaults. Deliberately customised
@@ -75,12 +75,20 @@ public final class TownyDragonEventPlugin extends JavaPlugin {
         if (version < 3 && getConfig().getInt("event.safe-exit.platform.radius", 4) == 4) {
             getConfig().set("event.safe-exit.platform.radius", 9);
         }
-        getConfig().set("config-version", 3);
-        getLogger().info("Updated TownyDragonEvent configuration to version 3.");
+        // Existing installations keep the old explicit 20-minute value even
+        // after the bundled default changes. Migrate that exact legacy value
+        // once, including files already marked version 4 by earlier defaults.
+        if (version < 5 && (!getConfig().contains("event.fight-time-limit-seconds", true)
+                || getConfig().getInt("event.fight-time-limit-seconds") == 1200)) {
+            getConfig().set("event.fight-time-limit-seconds", 1800);
+        }
+        getConfig().set("config-version", 5);
+        getLogger().info("Updated TownyDragonEvent configuration to version 5.");
     }
 
     private boolean approximately(double value, double expected) {
         return Math.abs(value - expected) < 0.000001;
     }
 }
+
 

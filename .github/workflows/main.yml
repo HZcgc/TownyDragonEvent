@@ -26,8 +26,8 @@ jobs:
       - name: Upload plugin JAR
         uses: actions/upload-artifact@v4
         with:
-          name: TownyDragonEvent-build35-Paper-26.2
-          path: target/TownyDragonEvent-0.1.0-build35.jar
+          name: TownyDragonEvent-build37-Paper-26.2
+          path: target/TownyDragonEvent-0.1.0-build37.jar
           if-no-files-found: error
           retention-days: 30
 
@@ -35,14 +35,15 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v0.1.0-build35
-          JAR: target/TownyDragonEvent-0.1.0-build35.jar
+          TAG: v0.1.0-build37
+          JAR: target/TownyDragonEvent-0.1.0-build37.jar
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$JAR" --clobber
           else
             gh release create "$TAG" "$JAR" \
-              --title "TownyDragonEvent 0.1.0-build35" \
+              --title "TownyDragonEvent 0.1.0-build37" \
               --generate-notes
           fi
+
 

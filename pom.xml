@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.townysmp</groupId>
   <artifactId>TownyDragonEvent</artifactId>
-  <version>0.1.0-build36</version>
+  <version>0.1.0-build37</version>
   <name>TownyDragonEvent</name>
   <properties>
     <maven.compiler.release>25</maven.compiler.release>
@@ -30,6 +30,10 @@
       <groupId>org.mockito</groupId><artifactId>mockito-core</artifactId>
       <version>5.20.0</version><scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>net.kyori</groupId><artifactId>adventure-text-logger-slf4j</artifactId>
+      <version>5.2.0</version><scope>test</scope>
+    </dependency>
   </dependencies>
   <build>
     <finalName>TownyDragonEvent-${project.version}</finalName>
@@ -46,9 +50,10 @@
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.5.2</version>
-        <configuration><argLine>-XX:+EnableDynamicAgentLoading</argLine></configuration>
+        <configuration><argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/5.20.0/mockito-core-5.20.0.jar -XX:+EnableDynamicAgentLoading</argLine></configuration>
       </plugin>
     </plugins>
   </build>
 </project>
+
 

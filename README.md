@@ -1,6 +1,7 @@
-# TownyDragonEvent build35
+# TownyDragonEvent build37
 
 See [boss modes, balancing and Dragon Crate rewards](docs/dragon-event-build35.md).
+Build 37 fixes [first-load Freddie messages and legacy 20-minute timers](docs/dragon-event-build37.md).
 
 # TownyDragonEvent
 
@@ -10,11 +11,11 @@ TownyDragonEvent runs scheduled, isolated Ender Dragon fights for TownyReborn on
 
 - Vanilla End Crystal respawn sequence in a custom arena
 - Three-hour announcements, five-minute lobby, late joining and a compact final countdown
-- Normal and `/dragon start april_fools` modes
+- Normal Dragon, April Fools Creeper and Freddie the Frog modes; automatic starts select them at 90% / 5% / 5%
 - April Fools portal cease-fire for a fair melee damage window
 - Expanded post-fight safety platform around the exit fountain
 - Group-scaled effective boss health above Minecraft's 1024 HP attribute limit
-- Separate April Fools health multiplier (50% of the equivalent normal fight by default)
+- Configurable special-boss health multipliers (twice the equivalent normal fight by default)
 - Per-player damage, death, crystal and explosion statistics with PlaceholderAPI support
 - Reward commands, damage tiers, rankings, seasons and victory fireworks
 - Five-life spectator system, KeepInventory, safe respawns, void rescue and a world border
@@ -42,7 +43,7 @@ The template should remain close to X/Z 0 so the Vanilla Dragon battle and tower
 | `/dragon leave` | Leave and return to the configured exit |
 | `/dragon status` | Show event state and player counts |
 | `/dragon stats [player]` | Show persistent statistics |
-| `/dragon start [normal\|april_fools] [seconds]` | Start an event |
+| `/dragon start [auto\|normal\|april_fools\|freddie] [seconds]` | Start an event |
 | `/dragon stop` | Stop and safely reset an event |
 | `/dragon reload` | Reload config and messages while idle |
 | `/dragon setspawn` | Set the arena arrival point in the template |
@@ -54,7 +55,7 @@ The template should remain close to X/Z 0 so the Vanilla Dragon battle and tower
 
 - `townysmp.dragon.join` — enabled by default
 - `townysmp.dragon.admin` — operator by default
-- `townysmp.dragon.build` — bypasses `event.block-building: false`
+- `townysmp.dragon.build` — bypasses the arena building restriction
 
 ## Build
 
@@ -64,5 +65,6 @@ Requires Java 25:
 mvn -B clean package
 ```
 
-The compiled plugin is written to `target/TownyDragonEvent-0.1.0-build32.jar`.
+The compiled plugin is written to `target/TownyDragonEvent-0.1.0-build37.jar`.
+
 

@@ -1,4 +1,4 @@
-config-version: 4
+config-version: 5
 world:
   template-folder: ''
   auto-template-name: dragonevent_template
@@ -330,3 +330,4 @@ displays:
   distance-from-portal: 10.5
   height: 4.5
   view-distance: 64.0
+
