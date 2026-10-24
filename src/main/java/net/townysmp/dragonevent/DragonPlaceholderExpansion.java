@@ -76,3 +76,4 @@ final class DragonPlaceholderExpansion extends PlaceholderExpansion {
 
     private String format(double value) { return String.format(Locale.US, "%.2f", value); }
 }
+

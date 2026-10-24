@@ -106,3 +106,4 @@ final class Messages {
         catch (NumberFormatException ignored) { return fallback; }
     }
 }
+

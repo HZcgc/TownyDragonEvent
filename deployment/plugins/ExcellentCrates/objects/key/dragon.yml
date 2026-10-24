@@ -1,0 +1,15 @@
+base:
+  virtual: true
+display:
+  name: <#FF55FF><b>Dragon</b></#FF55FF> <#55FF55><b>Key</b></#55FF55>
+  lore:
+  - <gray>Earned by placing in the Dragon Event top 3.</gray>
+  - <gray>Stored digitally in your key balance.</gray>
+item:
+  item:
+    Provider: vanilla
+    Data:
+      Value: '{count:1,id:"minecraft:tripwire_hook"}'
+      DataVersion: 4671
+  stackable: true
+  inherit_display_settings: true

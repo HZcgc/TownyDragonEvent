@@ -1,0 +1,48 @@
+base:
+  weight: 12.0
+preview:
+  name: <gradient:#FF55FF:#55FF55><b>64 Purpur Blocks</b></gradient>
+  lore:
+  - <gray>A reward from the Dragon Event.</gray>
+  icon:
+    Provider: vanilla
+    Data:
+      Value: '{count:1,id:"minecraft:purpur_block"}'
+      DataVersion: 4671
+  use_item_data: false
+Rarity:
+  enabled: true
+  rarity_id: common
+broadcast:
+  enabled: false
+limit:
+  enabled: false
+  global:
+    Enabled: false
+    Amount: -1
+  individual:
+    Enabled: false
+    Amount: -1
+  alternative:
+    enabled: false
+    reward_id:
+      namespace: none
+      value: none
+cooldown:
+  global:
+    enabled: false
+    mode: DAILY
+    value: 0
+  individual:
+    enabled: false
+    mode: DAILY
+    value: 0
+commands:
+  enabled: true
+  iterations: 1
+  give_mode: NORMAL
+  bundles:
+    dragon_reward:
+      commands:
+      - minecraft:give %player_name% minecraft:purpur_block 64
+      weight: 1.0

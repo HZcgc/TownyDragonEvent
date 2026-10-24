@@ -1,3 +1,7 @@
+# TownyDragonEvent build35
+
+See [boss modes, balancing and Dragon Crate rewards](docs/dragon-event-build35.md).
+
 # TownyDragonEvent
 
 TownyDragonEvent runs scheduled, isolated Ender Dragon fights for TownyReborn on Paper 26.2. A pristine End-world template is copied for every event and the disposable runtime world is removed only after all players have left and Paper confirms that it was unloaded.
@@ -61,3 +65,4 @@ mvn -B clean package
 ```
 
 The compiled plugin is written to `target/TownyDragonEvent-0.1.0-build32.jar`.
+

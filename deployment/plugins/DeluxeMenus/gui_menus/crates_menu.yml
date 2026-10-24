@@ -1,0 +1,174 @@
+menu_title: '&#FF55FF&lTOWNY&#55FF55&lREBORN &8» &fCrates'
+open_command:
+- crates
+register_command: true
+size: 27
+update_interval: 1
+open_commands:
+- '[sound] BLOCK_ENDER_CHEST_OPEN'
+items:
+  information:
+    update: true
+    material: TRIPWIRE_HOOK
+    slot: 4
+    display_name: '&#FF55FF&lVIRTUAL &#55FF55&lCRATE KEYS'
+    lore:
+    - ''
+    - '&7Your keys are stored digitally.'
+    - '&7Use them here or at the crates at spawn.'
+    - ''
+    - '&8• &7Daily Keys: &#55FF55&l%excellentcrates_key_balance_daily%'
+    - '&8• &7Vote Keys: &#55FF55&l%excellentcrates_key_balance_vote%'
+    - '&8• &7Cosmetic Keys: &#55FF55&l%excellentcrates_key_balance_cosmetic%'
+    - '&8• &7Supporter Keys: &#55FF55&l%excellentcrates_key_balance_patron%'
+    - ''
+    - '&#FF55FFLeft Click &8» &7Preview rewards'
+    - '&8• &7Dragon Keys: &#55FF55&l%excellentcrates_key_balance_dragon%'
+    - '&#55FF55Right Click &8» &7Choose how many to open'
+    - ''
+    - '&8Selection appears with 2+ available openings.'
+  daily_crate:
+    material: MAGENTA_SHULKER_BOX
+    slot: 10
+    update: true
+    display_name: '&#FF55FF&lDaily &#55FF55&lCrate'
+    lore:
+    - ''
+    - '&7A balanced reward for daily activity.'
+    - ''
+    - '&8• &7Your Keys: &#55FF55&l%excellentcrates_key_balance_daily%'
+    - ''
+    - '&#FF55FFLeft Click &8» &7Preview rewards'
+    - '&#55FF55Right Click &8» &7Choose how many to open'
+    left_click_commands:
+    - '[sound] UI_BUTTON_CLICK'
+    - '[close]'
+    - '[console] trcrate preview daily %player_name% <delay=1>'
+    right_click_commands:
+    - '[sound] BLOCK_ENDER_CHEST_OPEN'
+    - '[close]'
+    - '[console] trcrate open daily %player_name% <delay=1>'
+  vote_crate:
+    material: LIME_SHULKER_BOX
+    slot: 12
+    update: true
+    display_name: '&#FF55FF&lVote &#55FF55&lCrate'
+    lore:
+    - ''
+    - '&7Rewards for supporting the server with votes.'
+    - ''
+    - '&8• &7Your Keys: &#55FF55&l%excellentcrates_key_balance_vote%'
+    - ''
+    - '&#FF55FFLeft Click &8» &7Preview rewards'
+    - '&#55FF55Right Click &8» &7Choose how many to open'
+    left_click_commands:
+    - '[sound] UI_BUTTON_CLICK'
+    - '[close]'
+    - '[console] trcrate preview vote %player_name% <delay=1>'
+    right_click_commands:
+    - '[sound] BLOCK_ENDER_CHEST_OPEN'
+    - '[close]'
+    - '[console] trcrate open vote %player_name% <delay=1>'
+  cosmetic_crate:
+    material: LIME_SHULKER_BOX
+    slot: 14
+    update: true
+    display_name: '&#FF55FF&lCosmetic &#55FF55&lCrate'
+    lore:
+    - ''
+    - '&7Unlock one personal cosmetic permanently.'
+    - '&7Duplicate cosmetics are skipped automatically.'
+    - ''
+    - '&8• &7Your Keys: &#55FF55&l%excellentcrates_key_balance_cosmetic%'
+    - ''
+    - '&#FF55FFLeft Click &8» &7Preview rewards'
+    - '&#55FF55Right Click &8» &7Choose how many to open'
+    left_click_commands:
+    - '[sound] UI_BUTTON_CLICK'
+    - '[close]'
+    - '[console] trcrate preview cosmetic %player_name% <delay=1>'
+    right_click_commands:
+    - '[sound] BLOCK_ENDER_CHEST_OPEN'
+    - '[close]'
+    - '[console] trcrate open cosmetic %player_name% <delay=1>'
+  supporter_crate:
+    material: MAGENTA_SHULKER_BOX
+    slot: 16
+    update: true
+    display_name: '&#FF55FF&lSupporter &#55FF55&lCrate'
+    lore:
+    - ''
+    - '&7A daily thank-you for active supporters.'
+    - '&7Convenience-focused and balanced for the server.'
+    - ''
+    - '&8• &7Your Keys: &#55FF55&l%excellentcrates_key_balance_patron%'
+    - ''
+    - '&#FF55FFLeft Click &8» &7Preview rewards'
+    - '&#55FF55Right Click &8» &7Choose how many to open'
+    left_click_commands:
+    - '[sound] UI_BUTTON_CLICK'
+    - '[close]'
+    - '[console] trcrate preview patron %player_name% <delay=1>'
+    right_click_commands:
+    - '[sound] BLOCK_ENDER_CHEST_OPEN'
+    - '[close]'
+    - '[console] trcrate open patron %player_name% <delay=1>'
+  close:
+    material: BARRIER
+    slot: 22
+    display_name: '&#FF55FF&lClose'
+    lore:
+    - '&7Close this menu.'
+    click_commands:
+    - '[sound] UI_BUTTON_CLICK'
+    - '[close]'
+  border:
+    material: BLACK_STAINED_GLASS_PANE
+    slots:
+    - 1
+    - 2
+    - 3
+    - 5
+    - 6
+    - 7
+    - 9
+    - 11
+    - 15
+    - 17
+    - 19
+    - 20
+    - 21
+    - 23
+    - 24
+    - 25
+    display_name: ' '
+  brand_corners:
+    material: MAGENTA_STAINED_GLASS_PANE
+    slots:
+    - 0
+    - 8
+    - 18
+    - 26
+    display_name: ' '
+  dragon_crate:
+    material: DRAGON_EGG
+    slot: 13
+    update: true
+    display_name: '&#FF55FF&lDragon &#55FF55&lCrate'
+    lore:
+    - ''
+    - '&7Earn keys by placing in the Dragon Event top 3.'
+    - '&7End treasures, with rare Elytra and Dragon Eggs.'
+    - ''
+    - '&8• &7Your Keys: &#55FF55&l%excellentcrates_key_balance_dragon%'
+    - ''
+    - '&#FF55FFLeft Click &8» &7Preview rewards'
+    - '&#55FF55Right Click &8» &7Choose how many to open'
+    left_click_commands:
+    - '[sound] UI_BUTTON_CLICK'
+    - '[close]'
+    - '[console] trcrate preview dragon %player_name% <delay=1>'
+    right_click_commands:
+    - '[sound] BLOCK_ENDER_CHEST_OPEN'
+    - '[close]'
+    - '[console] trcrate open dragon %player_name% <delay=1>'
