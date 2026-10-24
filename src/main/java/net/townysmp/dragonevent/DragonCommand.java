@@ -48,11 +48,11 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
             case "stats" -> showStats(sender, args);
             case "start" -> {
                 if (!admin(sender)) return true;
-                EventMode mode = EventMode.NORMAL;
+                EventMode mode = null;
                 Integer seconds = null;
                 if (args.length > 1) {
                     EventMode parsed = EventMode.parse(args[1]);
-                    if (parsed != null) {
+                    if (parsed != null || args[1].equalsIgnoreCase("auto")) {
                         mode = parsed;
                         int secondsIndex = 2;
                         if (args[1].equalsIgnoreCase("april") && args.length > 2
@@ -63,14 +63,14 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
                         if (args.length > secondsIndex) {
                             try { seconds = Integer.parseInt(args[secondsIndex]); }
                             catch (NumberFormatException ignored) {
-                                sender.sendMessage("Usage: /dragon start [normal|april_fools|april fools] [countdown-seconds]");
+                                sender.sendMessage("Usage: /dragon start [auto|normal|april_fools|freddie] [countdown-seconds]");
                                 return true;
                             }
                         }
                     } else {
                         try { seconds = Integer.parseInt(args[1]); }
                         catch (NumberFormatException ignored) {
-                            sender.sendMessage("Usage: /dragon start [normal|april_fools|april fools] [countdown-seconds]");
+                            sender.sendMessage("Usage: /dragon start [auto|normal|april_fools|freddie] [countdown-seconds]");
                             return true;
                         }
                     }
@@ -195,7 +195,7 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
         if (args.length == 2 && args[0].equalsIgnoreCase("start")
                 && sender.hasPermission("townysmp.dragon.admin")) {
             String prefix = args[1].toLowerCase(Locale.ROOT);
-            return List.of("normal", "april_fools").stream().filter(value -> value.startsWith(prefix)).toList();
+            return List.of("auto", "normal", "april_fools", "freddie").stream().filter(value -> value.startsWith(prefix)).toList();
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("start")
                 && args[1].equalsIgnoreCase("april") && sender.hasPermission("townysmp.dragon.admin")) {
@@ -209,7 +209,7 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
             return List.of("30", "300", "10800").stream().filter(value -> value.startsWith(args[3])).toList();
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("start")
-                && EventMode.parse(args[1]) != null && sender.hasPermission("townysmp.dragon.admin")) {
+                && (EventMode.parse(args[1]) != null || args[1].equalsIgnoreCase("auto")) && sender.hasPermission("townysmp.dragon.admin")) {
             return List.of("30", "300", "10800").stream().filter(value -> value.startsWith(args[2])).toList();
         }
         if (args.length != 1) return List.of();
@@ -221,3 +221,4 @@ final class DragonCommand implements CommandExecutor, TabCompleter {
         return choices.stream().filter(value -> value.startsWith(prefix)).toList();
     }
 }
+

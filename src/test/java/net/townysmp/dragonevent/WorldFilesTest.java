@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 final class WorldFilesTest {
     @TempDir
@@ -48,9 +49,47 @@ final class WorldFilesTest {
         assertEquals("arena chunks", Files.readString(runtime.resolve("region/r.0.0.mca")));
     }
 
+    @Test void anUnmarkedWorldIsPreservedAndReceivesASeparateRuntime() throws Exception {
+        Path existing = temporaryDirectory.resolve("world/dimensions/minecraft/dragonevent_end");
+        write(existing, "region/r.0.0.mca", "must survive");
+        Path selected = WorldFiles.selectRuntime(temporaryDirectory, existing);
+        assertEquals(existing.resolveSibling("dragonevent_end_tr1"), selected);
+        assertEquals("must survive", Files.readString(existing.resolve("region/r.0.0.mca")));
+        assertThrows(java.io.IOException.class, () -> WorldFiles.delete(temporaryDirectory, existing));
+    }
+
+    @Test void deletingAnOwnedRuntimeCannotDeleteTheTemplate() throws Exception {
+        Path namespace = temporaryDirectory.resolve("world/dimensions/minecraft");
+        Path template = namespace.resolve("dragonevent_template");
+        Path runtime = namespace.resolve("dragonevent_end");
+        write(template, "region/r.0.0.mca", "original");
+        WorldFiles.copy(temporaryDirectory, template, runtime);
+        assertEquals(runtime, WorldFiles.selectRuntime(temporaryDirectory, runtime));
+        WorldFiles.delete(temporaryDirectory, runtime);
+        assertFalse(Files.exists(runtime));
+        assertEquals("original", Files.readString(template.resolve("region/r.0.0.mca")));
+    }
+
+    @Test void worldContainerAndTraversalAreRejected() {
+        assertThrows(java.io.IOException.class, () -> WorldFiles.delete(temporaryDirectory, temporaryDirectory));
+        assertThrows(java.io.IOException.class, () -> WorldFiles.delete(temporaryDirectory, temporaryDirectory.resolve("../other-world")));
+    }
+
+    @Test void aSymlinkTemplateCannotPullInAnExternalWorld() throws Exception {
+        Path namespace = temporaryDirectory.resolve("world/dimensions/minecraft");
+        Files.createDirectories(namespace);
+        Path external = temporaryDirectory.resolve("external");
+        write(external, "region/r.0.0.mca", "keep");
+        Path template = namespace.resolve("dragonevent_template");
+        Files.createSymbolicLink(template, external);
+        assertThrows(java.io.IOException.class, () -> WorldFiles.copy(temporaryDirectory, template, namespace.resolve("dragonevent_end")));
+        assertEquals("keep", Files.readString(external.resolve("region/r.0.0.mca")));
+    }
+
     private static void write(Path root, String relativePath, String content) throws Exception {
         Path file = root.resolve(relativePath);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
     }
 }
+

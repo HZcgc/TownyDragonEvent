@@ -1,0 +1,93 @@
+base:
+  permission_required: false
+display:
+  name: <#FF55FF><b>Dragon</b></#FF55FF> <#55FF55><b>Crate</b></#55FF55>
+  lore:
+  - <gray>End treasures for the Dragon Event top 3.</gray>
+  - <dark_gray>Rare Elytra and Dragon Egg jackpots.</dark_gray>
+item:
+  item:
+    Provider: vanilla
+    Data:
+      Value: '{count:1,id:"minecraft:ender_chest"}'
+      DataVersion: 4671
+  item_stackable: false
+  use_display: true
+rewards:
+  required_rewards: 1
+  reward_list:
+    2207fd88-7937-565a-b457-88b496c1ccee:
+      reward_id: dragon_end_stone_64
+    dd37faa0-8644-59f8-8376-02c61c007fa4:
+      reward_id: dragon_end_stone_bricks_64
+    4a3d3360-a085-58e0-80f9-7a0d6838179d:
+      reward_id: dragon_purpur_blocks_64
+    374ca6ae-fff4-54c0-a517-076e1756c317:
+      reward_id: dragon_chorus_fruit_32
+    af2eecbf-4e9f-5003-8fe4-3f62ea674d52:
+      reward_id: dragon_popped_chorus_32
+    903b13b9-306b-5819-87fd-457c3adb749c:
+      reward_id: dragon_end_rods_16
+    fff2777c-5d49-555e-9b38-d00161f8c85b:
+      reward_id: dragon_ender_pearls_16
+    af69ae5e-2273-5a0c-b88a-e31469bddd12:
+      reward_id: dragon_obsidian_32
+    65982f3d-6fe0-5138-8925-6e974dcda84b:
+      reward_id: dragon_ender_chest_1
+    d8e30467-153b-59e7-b606-0790f2c68503:
+      reward_id: dragon_shulker_shells_2
+    329ddac3-b7bf-5c8c-ba3b-f9258bdcea2f:
+      reward_id: dragon_dragons_breath_8
+    a8ed3d1a-28ff-5a25-b9cc-5f284f718b5e:
+      reward_id: dragon_end_crystals_2
+    c5051595-8944-5b8d-a8fc-b52fcc4e7579:
+      reward_id: dragon_shulker_box_1
+    9a561fa5-d8c1-5d00-b636-11fadd752100:
+      reward_id: dragon_dragon_head_1
+    74da4e35-a268-56ae-9880-45c3d3ad860c:
+      reward_id: dragon_elytra_1
+    3f2526e3-8ac7-54ef-95af-dd1acab6ed93:
+      reward_id: dragon_dragon_egg_1
+key_requirements:
+  enabled: true
+  keys:
+    dragon:
+      amount: 1
+animation:
+  enabled: true
+  profile: csgo_animation:default
+preview:
+  enabled: true
+  config: inventory:towny_reborn
+opening:
+  enabled: true
+  opening_commands: []
+cooldowns:
+  global:
+    enabled: false
+    mode: CUSTOM
+    value: 0
+  individual:
+    enabled: false
+    mode: CUSTOM
+    value: 1
+blocks: {}
+hologram:
+  enabled: true
+  text:
+  - <#FF55FF><b>TOWNY</b></#FF55FF><#55FF55><b>REBORN</b></#55FF55>
+  - '%crate_name%'
+  - ''
+  - '%crate_description%'
+  - ''
+  - <#FF55FF>Left-Click</#FF55FF><gray> to preview rewards</gray>
+  - <#55FF55>Right-Click</#55FF55><gray> to choose how many to open</gray>
+  offset:
+    x: 0.0
+    y: 0.7
+    z: 0.0
+effect:
+  enabled: true
+  profile: helix:default
+selective_rewards:
+  enabled: false

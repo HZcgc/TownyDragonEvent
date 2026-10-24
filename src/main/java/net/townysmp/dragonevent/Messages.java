@@ -31,16 +31,14 @@ final class Messages {
         File target = new File(plugin.getDataFolder(), "messages.yml");
         if (!target.exists()) plugin.saveResource("messages.yml", false);
         file = YamlConfiguration.loadConfiguration(target);
-        InputStream defaultsStream = plugin.getResource("messages.yml");
-        if (defaultsStream != null) {
+        try (InputStream defaultsStream = plugin.getResource("messages.yml")) {
+            if (defaultsStream == null) return;
             file.setDefaults(YamlConfiguration.loadConfiguration(new InputStreamReader(
                     defaultsStream, StandardCharsets.UTF_8)));
             file.options().copyDefaults(true);
-            try {
-                file.save(target);
-            } catch (IOException exception) {
-                plugin.getLogger().warning("Could not write missing defaults to messages.yml: " + exception.getMessage());
-            }
+            file.save(target);
+        } catch (IOException exception) {
+            plugin.getLogger().warning("Could not write missing defaults to messages.yml: " + exception.getMessage());
         }
     }
 
@@ -49,12 +47,16 @@ final class Messages {
     }
 
     Component get(String key, Map<String, String> replacements) {
-        String prefix = file.getString("prefix", "");
+        String prefix = file.getString("prefix");
+        if (prefix == null) prefix = "";
         return mini.deserialize(prefix).append(getRaw(key, replacements));
     }
 
     Component getRaw(String key, Map<String, String> replacements) {
-        String value = file.getString(key, "<red>Missing message: " + key + "</red>");
+        // Passing an explicit fallback to Bukkit getString bypasses configured
+        // defaults, even with copyDefaults(true), until the next file reload.
+        String value = file.getString(key);
+        if (value == null) value = "<red>Missing message: " + key + "</red>";
         for (Map.Entry<String, String> entry : replacements.entrySet()) {
             value = value.replace("{" + entry.getKey() + "}", entry.getValue());
         }
@@ -106,3 +108,5 @@ final class Messages {
         catch (NumberFormatException ignored) { return fallback; }
     }
 }
+
+
